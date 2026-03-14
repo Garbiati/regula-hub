@@ -1,0 +1,71 @@
+[tool.poetry]
+name = "regula-hub"
+version = "0.1.0"
+description = "WebAPI that wraps SisReg III via direct HTTP requests"
+authors = ["Alessandro Garbiati"]
+readme = "readme.md"
+packages = [{include = "regulahub", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115"
+uvicorn = {extras = ["standard"], version = "^0.34"}
+httpx = "^0.28"
+pydantic = "^2.10"
+pydantic-settings = "^2.7"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0"}
+asyncpg = "^0.30"
+alembic = "^1.14"
+structlog = "^24.0"
+cryptography = "^44.0"
+slowapi = "^0.1.9"
+selectolax = "^0.3"
+tenacity = "^9.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.9"
+pytest = "^8.3"
+pytest-asyncio = "^0.25"
+respx = "^0.22"
+httpx = "^0.28"
+pre-commit = "^4.0"
+bandit = {version = "^1.8", extras = ["toml"]}
+aiosqlite = "^0.20"
+pytest-cov = "^7.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM", "TCH", "S"]
+ignore = ["B008", "A005", "S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["regulahub"]
+omit = ["*/scripts/*", "*/logging_config.py", "*/integrations/*", "*/utils/pdf.py", "*/db/statuses.py"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+]
