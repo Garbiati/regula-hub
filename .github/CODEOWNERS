@@ -1,0 +1,6 @@
+# Default: tc-backend code owners team reviews everything
+* @ptm-development/code-owners-tc-backend
+
+# Python-specific reviews
+src/ @ptm-development/python-devs
+tests/ @ptm-development/python-devs

@@ -1,0 +1,823 @@
+{
+	"info": {
+		"_postman_id": "64cc30e8-73a1-48ad-a8e8-70a9195d579b",
+		"name": "regula-hub",
+		"description": "Collection for the regula-hub microservice — a FastAPI wrapper around SisReg III.\n\n**Quick Start:**\n1. Set the `api_key` collection variable with a valid API key\n2. Run requests in order: Health → Raw Videofonista → Sync\n\n**Authentication:** All endpoints (except `/health`) require an `X-API-Key` header. Set the `api_key` collection variable.\n\nGenerate an API key with:\n```\npython -c \"import secrets; print(secrets.token_urlsafe(32))\"\n```\n\n**Endpoint Groups:**\n- **Health** — Service health and dependency checks (no auth required)\n- **Raw (Videofonista)** — SisReg pass-through endpoints (dd/MM/yyyy dates)\n- **Sync (Pipeline)** — Integration pipeline status, appointments, and manual trigger (ISO dates)\n\n**Date Formats:**\n- Raw Videofonista: `dd/MM/yyyy` (use `{{date_initial}}` and `{{date_final}}` variables)\n- Sync endpoints: `YYYY-MM-DD` (use `{{iso_date}}` variable)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "appointment_code",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "date_initial",
+			"value": "09/03/2026",
+			"type": "string",
+			"description": "Start date in dd/MM/yyyy format for raw Videofonista endpoints"
+		},
+		{
+			"key": "date_final",
+			"value": "09/03/2026",
+			"type": "string",
+			"description": "End date in dd/MM/yyyy format for raw Videofonista endpoints"
+		},
+		{
+			"key": "iso_date",
+			"value": "2026-03-09",
+			"type": "string",
+			"description": "Date in YYYY-MM-DD format for regulation endpoints"
+		},
+		{
+			"key": "api_key",
+			"value": "",
+			"type": "string",
+			"description": "API key for X-API-Key header. Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"description": "Service health and dependency checks.",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Service is healthy', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.status).to.eql('healthy');",
+									"    pm.expect(json.service).to.eql('regula-hub');",
+									"    pm.expect(json.checks.sisreg_reachable.status).to.eql('healthy');",
+									"});",
+									"",
+									"pm.test('Has version and uptime', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.version).to.be.a('string');",
+									"    pm.expect(json.uptime_seconds).to.be.a('number');",
+									"    pm.expect(json.timestamp).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Returns the overall service health status, version, uptime, and dependency checks (SisReg III reachability).\n\n**Status Codes:**\n- `200` — Service is healthy\n- `503` — Service is unhealthy (SisReg unreachable)"
+					},
+					"response": [
+						{
+							"name": "Healthy",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"health"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"status\": \"healthy\",\n  \"service\": \"regula-hub\",\n  \"version\": \"0.1.0\",\n  \"uptime_seconds\": 42.0,\n  \"timestamp\": \"2026-03-09T10:30:45.123456+00:00\",\n  \"checks\": {\n    \"sisreg_reachable\": {\n      \"status\": \"healthy\",\n      \"latency_ms\": 142.5,\n      \"detail\": null\n    }\n  }\n}"
+						},
+						{
+							"name": "Unhealthy",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"health"
+									]
+								}
+							},
+							"status": "Service Unavailable",
+							"code": 503,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"status\": \"unhealthy\",\n  \"service\": \"regula-hub\",\n  \"version\": \"0.1.0\",\n  \"uptime_seconds\": 5.0,\n  \"timestamp\": \"2026-03-09T10:30:45.123456+00:00\",\n  \"checks\": {\n    \"sisreg_reachable\": {\n      \"status\": \"unhealthy\",\n      \"latency_ms\": null,\n      \"detail\": \"Service unavailable\"\n    }\n  }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Raw (Videofonista)",
+			"description": "Raw SisReg endpoints using Videofonista profile (state-wide view). Pass-through 1:1 mapping of SisReg CGI functionality.\n\nAll endpoints require X-API-Key header.",
+			"item": [
+				{
+					"name": "Videofonista - List Appointments",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has appointments array', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.appointments).to.be.an('array');",
+									"    pm.expect(json.total).to.be.a('number');",
+									"    pm.expect(json.total).to.eql(json.appointments.length);",
+									"});",
+									"",
+									"pm.test('Response has pagination fields', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.current_page).to.be.a('number');",
+									"    pm.expect(json.current_page).to.be.at.least(1);",
+									"    pm.expect(json.total_pages).to.be.a('number');",
+									"    pm.expect(json.total_pages).to.be.at.least(1);",
+									"});",
+									"",
+									"pm.test('Save first appointment code for detail', function () {",
+									"    var json = pm.response.json();",
+									"    if (json.appointments.length > 0) {",
+									"        var code = json.appointments[0].code;",
+									"        pm.collectionVariables.set('appointment_code', code);",
+									"        console.log('Saved appointment_code: ' + code);",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"description": "API key for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/raw/videofonista/appointments?dt_inicial={{date_initial}}&dt_final={{date_final}}&cmb_situacao=7",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"raw",
+								"videofonista",
+								"appointments"
+							],
+							"query": [
+								{
+									"key": "dt_inicial",
+									"value": "{{date_initial}}",
+									"description": "Start date in dd/MM/yyyy format (required)"
+								},
+								{
+									"key": "dt_final",
+									"value": "{{date_final}}",
+									"description": "End date in dd/MM/yyyy format (required)"
+								},
+								{
+									"key": "tipo_periodo",
+									"value": "A",
+									"description": "Period type: S=Solicitation, A=Scheduling, E=Execution, P=Pending, C=Cancellation (default: A)",
+									"disabled": true
+								},
+								{
+									"key": "cmb_situacao",
+									"value": "7",
+									"description": "Status filter 1-12 (default: 7 = Scheduled/Pending/Executed)"
+								},
+								{
+									"key": "qtd_itens_pag",
+									"value": "0",
+									"description": "Items per page: 10, 20, 50, 100, 0=all (default: 0)",
+									"disabled": true
+								},
+								{
+									"key": "pagina",
+									"value": "0",
+									"description": "Page number, 0-based (default: 0)",
+									"disabled": true
+								},
+								{
+									"key": "ordenacao",
+									"value": "2",
+									"description": "Sort order (default: 2)",
+									"disabled": true
+								},
+								{
+									"key": "co_solicitacao",
+									"value": "",
+									"description": "Filter by appointment code",
+									"disabled": true
+								},
+								{
+									"key": "cns_paciente",
+									"value": "",
+									"description": "Filter by patient CNS",
+									"disabled": true
+								},
+								{
+									"key": "no_usuario",
+									"value": "",
+									"description": "Filter by patient name",
+									"disabled": true
+								},
+								{
+									"key": "cnes_solicitante",
+									"value": "",
+									"description": "Filter by requesting unit CNES",
+									"disabled": true
+								},
+								{
+									"key": "cnes_executante",
+									"value": "",
+									"description": "Filter by executing unit CNES",
+									"disabled": true
+								},
+								{
+									"key": "co_proc_unificado",
+									"value": "",
+									"description": "Filter by unified procedure code",
+									"disabled": true
+								},
+								{
+									"key": "co_pa_interno",
+									"value": "",
+									"description": "Filter by internal procedure code",
+									"disabled": true
+								},
+								{
+									"key": "ds_procedimento",
+									"value": "",
+									"description": "Filter by procedure description",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Lists appointments using the Videofonista profile (state-wide view) — pass-through 1:1 with SisReg CGI.\n\nAll query parameters map directly to SisReg form fields. Uses the main SISREG_USERNAME/SISREG_PASSWORD credentials.\n\n**Required Parameters:**\n- `dt_inicial` — Start date in `dd/MM/yyyy` format\n- `dt_final` — End date in `dd/MM/yyyy` format\n\n**Optional Parameters (with defaults):**\n- `tipo_periodo` (default `A`) — Period type (S/A/E/P/C)\n- `cmb_situacao` (default `7`) — Status filter (1-12)\n- `qtd_itens_pag` (default `0`) — Items per page (10/20/50/100/0=all)\n- `pagina` (default `0`) — Page number (0-based)\n- `ordenacao` (default `2`) — Sort order\n\n**Optional Filters (empty by default):**\n- `co_solicitacao` — Appointment code\n- `cns_paciente` — Patient CNS\n- `no_usuario` — Patient name\n- `cnes_solicitante` — Requesting unit CNES\n- `cnes_executante` — Executing unit CNES\n- `co_proc_unificado` — Unified procedure code\n- `co_pa_interno` — Internal procedure code\n- `ds_procedimento` — Procedure description\n\n**Response includes pagination:** `current_page` (1-based) and `total_pages`.\n\n**Status Codes:**\n- `200` — Success\n- `401` — Invalid SisReg credentials\n- `422` — Invalid parameter format\n- `503` — SisReg session expired after retries"
+					},
+					"response": [
+						{
+							"name": "Success — 1 appointment",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"description": "API key for authentication"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/raw/videofonista/appointments?dt_inicial=09/03/2026&dt_final=09/03/2026&cmb_situacao=7",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"raw",
+										"videofonista",
+										"appointments"
+									],
+									"query": [
+										{
+											"key": "dt_inicial",
+											"value": "09/03/2026"
+										},
+										{
+											"key": "dt_final",
+											"value": "09/03/2026"
+										},
+										{
+											"key": "cmb_situacao",
+											"value": "7"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"appointments\": [\n    {\n      \"code\": \"1234567890\",\n      \"request_date\": \"09/03/2026\",\n      \"risk\": 0,\n      \"patient\": \"JOAO DA SILVA\",\n      \"age\": \"45\",\n      \"procedure\": \"TELECONSULTA EM CARDIOLOGIA\",\n      \"cid\": \"I10\",\n      \"department_solicitation\": \"UBS CENTRO\",\n      \"department_execute\": \"HOSPITAL REGIONAL\",\n      \"status_sisreg\": \"AGE/PEN/EXEC\"\n    }\n  ],\n  \"total\": 1,\n  \"current_page\": 1,\n  \"total_pages\": 1\n}"
+						}
+					]
+				},
+				{
+					"name": "Videofonista - Appointment Detail",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var code = pm.collectionVariables.get('appointment_code');",
+									"if (!code) {",
+									"    console.warn('appointment_code not set. Run a listing request first to auto-populate it.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Detail has code', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.detail).to.be.an('object');",
+									"    pm.expect(json.detail.code).to.be.a('string');",
+									"});",
+									"",
+									"pm.test('Phone is object or null', function () {",
+									"    var phone = pm.response.json().detail.best_phone;",
+									"    if (phone !== null) {",
+									"        pm.expect(phone).to.have.property('ddd');",
+									"        pm.expect(phone).to.have.property('number');",
+									"        pm.expect(phone).to.have.property('phone_type');",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"description": "API key for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/raw/videofonista/appointments/{{appointment_code}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"raw",
+								"videofonista",
+								"appointments",
+								"{{appointment_code}}"
+							]
+						},
+						"description": "Returns detailed appointment information using the Videofonista profile.\n\nSame response schema as `/appointments/{code}` but explicitly forces the Videofonista profile.\n\n**Path Parameters:**\n- `code` — The appointment code (auto-populated from listing requests)\n\n**Status Codes:**\n- `200` — Success\n- `401` — Invalid SisReg credentials\n- `422` — Invalid code format\n- `503` — SisReg session expired after retries"
+					},
+					"response": [
+						{
+							"name": "Detail with phone",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"description": "API key for authentication"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/raw/videofonista/appointments/1234567890",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"raw",
+										"videofonista",
+										"appointments",
+										"1234567890"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"detail\": {\n    \"code\": \"1234567890\",\n    \"confirmation_key\": \"CONF-KEY-12345\",\n    \"cns\": \"123456789012345\",\n    \"appointment_date\": \"15/03/2026\",\n    \"doctor_solicitation\": \"DR. MEDICO SOLICITANTE\",\n    \"doctor_crm\": \"CRM-12345\",\n    \"doctor_solicitation_cpf\": \"123.456.789-00\",\n    \"priority\": \"ALTA\",\n    \"regulatory_center\": \"CENTRAL DE REGULACAO AM\",\n    \"cnes\": \"2018756\",\n    \"department\": \"HOSPITAL REGIONAL DE MANAUS\",\n    \"videocall_operator\": \"OPERADOR VIDEOCALL\",\n    \"solicitation_operator\": \"OPERADOR SOLICITACAO\",\n    \"observations\": \"Paciente com historico de HAS\",\n    \"best_phone\": {\n      \"ddd\": \"92\",\n      \"number\": \"98765-4321\",\n      \"phone_type\": \"mobile\"\n    }\n  }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Sync (Pipeline)",
+			"description": "Visibility and control of the integration pipeline. All endpoints require `X-API-Key` header.\n\n**Endpoints:**\n- `GET /sync/status` — Worker status and last execution summary\n- `GET /sync/appointments?date=YYYY-MM-DD` — Integrated appointments for a date\n- `POST /sync/trigger?date=YYYY-MM-DD` — Trigger pipeline execution",
+			"item": [
+				{
+					"name": "Worker Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Has worker status fields', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('enabled');",
+									"    pm.expect(json).to.have.property('is_running');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"description": "API key for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/sync/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sync",
+								"status"
+							]
+						},
+						"description": "Returns the current worker status (enabled/running) and the last sync execution summary.\n\n**Response Fields:**\n- `enabled` — Whether the background worker is enabled\n- `is_running` — Whether the worker is currently executing\n- `last_execution` — Summary of the most recent execution (null if none)"
+					},
+					"response": [
+						{
+							"name": "Worker enabled, last run completed",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/sync/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sync",
+										"status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"enabled\": true,\n  \"is_running\": false,\n  \"last_execution\": {\n    \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"reference_date\": \"2026-03-10\",\n    \"started_at\": \"2026-03-10T08:00:00Z\",\n    \"finished_at\": \"2026-03-10T08:05:32Z\",\n    \"status\": \"completed\",\n    \"total_listed\": 150,\n    \"total_details_fetched\": 148,\n    \"total_transformed\": 140,\n    \"total_integrated\": 140,\n    \"total_reminders_sent\": 135,\n    \"total_errors\": 8,\n    \"error_summary\": null\n  }\n}"
+						},
+						{
+							"name": "Worker disabled, no executions",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/sync/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sync",
+										"status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"enabled\": false,\n  \"is_running\": false,\n  \"last_execution\": null\n}"
+						}
+					]
+				},
+				{
+					"name": "List Sync Appointments",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Has expected structure', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('reference_date');",
+									"    pm.expect(json).to.have.property('appointments');",
+									"    pm.expect(json).to.have.property('total');",
+									"    pm.expect(json.appointments).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Total matches array length', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.total).to.eql(json.appointments.length);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"description": "API key for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/sync/appointments?date={{iso_date}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sync",
+								"appointments"
+							],
+							"query": [
+								{
+									"key": "date",
+									"value": "{{iso_date}}",
+									"description": "Reference date in YYYY-MM-DD format (required)"
+								}
+							]
+						},
+						"description": "Lists all integrated appointments for a given date, including their pipeline status (new, pending_reminder, sent_reminder, etc.) and any integration errors.\n\n**Query Parameters:**\n- `date` (required) — Reference date in `YYYY-MM-DD` format\n\n**Appointment Statuses:**\n- `new` — Freshly transformed, not yet integrated\n- `pending_reminder` — Patient registered, awaiting reminder\n- `sent_reminder` — Reminder sent to Saude Digital\n- `detail_not_found` — Missing confirmation key or appointment date\n- `procedure_not_found` — SisReg procedure code not in reference data\n- `department_not_found` — Executing department CNES not in reference data\n- `date_in_past` — Appointment date already passed\n- `register_patient_error` — Failed to register/find patient\n- `send_reminder_error` — Failed to create reminder\n- `unknown_error` — Unexpected error"
+					},
+					"response": [
+						{
+							"name": "Success — appointments found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/sync/appointments?date=2026-03-10",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sync",
+										"appointments"
+									],
+									"query": [
+										{
+											"key": "date",
+											"value": "2026-03-10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"reference_date\": \"2026-03-10\",\n  \"last_sync\": {\n    \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"reference_date\": \"2026-03-10\",\n    \"started_at\": \"2026-03-10T08:00:00Z\",\n    \"finished_at\": \"2026-03-10T08:05:32Z\",\n    \"status\": \"completed\",\n    \"total_listed\": 150,\n    \"total_details_fetched\": 148,\n    \"total_transformed\": 140,\n    \"total_integrated\": 140,\n    \"total_reminders_sent\": 135,\n    \"total_errors\": 8,\n    \"error_summary\": null\n  },\n  \"appointments\": [\n    {\n      \"id\": \"b2c3d4e5-f6a7-8901-bcde-f12345678901\",\n      \"regulation_code\": \"1234567890\",\n      \"confirmation_key\": \"CONF123\",\n      \"appointment_date\": \"2026-03-10\",\n      \"appointment_time\": \"14:00\",\n      \"patient_first_name\": \"MARIA\",\n      \"procedure_name\": \"TELECONSULTA EM CARDIOLOGIA\",\n      \"speciality_name\": \"Cardiologia\",\n      \"status\": \"sent_reminder\",\n      \"saude_digital_appointment_id\": \"c3d4e5f6-a7b8-9012-cdef-123456789012\",\n      \"integration_error_message\": null\n    },\n    {\n      \"id\": \"d4e5f6a7-b8c9-0123-defa-234567890123\",\n      \"regulation_code\": \"9876543210\",\n      \"confirmation_key\": \"CONF456\",\n      \"appointment_date\": \"2026-03-10\",\n      \"appointment_time\": \"15:30\",\n      \"patient_first_name\": \"JOAO\",\n      \"procedure_name\": \"TELECONSULTA EM DERMATOLOGIA\",\n      \"speciality_name\": \"Dermatologia\",\n      \"status\": \"register_patient_error\",\n      \"saude_digital_appointment_id\": null,\n      \"integration_error_message\": \"Failed to register patient: 500\"\n    }\n  ],\n  \"total\": 2\n}"
+						},
+						{
+							"name": "Success — empty",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/sync/appointments?date=2026-01-01",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sync",
+										"appointments"
+									],
+									"query": [
+										{
+											"key": "date",
+											"value": "2026-01-01"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"reference_date\": \"2026-01-01\",\n  \"last_sync\": null,\n  \"appointments\": [],\n  \"total\": 0\n}"
+						}
+					]
+				},
+				{
+					"name": "Trigger Sync",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Returns execution ID', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('execution_id');",
+									"    pm.expect(json.execution_id).to.be.a('string');",
+									"    pm.expect(json.message).to.eql('sync triggered');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"description": "API key for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/sync/trigger?date={{iso_date}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sync",
+								"trigger"
+							],
+							"query": [
+								{
+									"key": "date",
+									"value": "{{iso_date}}",
+									"description": "Reference date in YYYY-MM-DD format (optional, defaults to today)"
+								}
+							]
+						},
+						"description": "Triggers a sync pipeline execution asynchronously. Returns immediately with the execution ID.\n\nThe pipeline runs in the background through 4 steps:\n1. **Scrape** — List appointments from SisReg for all 19 procedure codes\n2. **Fetch Details** — Get scheduling detail for each appointment\n3. **Transform & Integrate** — Register patients, map procedures/departments\n4. **Send Reminders** — Create reminders in Saude Digital\n\nUse `GET /sync/status` to monitor progress.\n\n**Query Parameters:**\n- `date` (optional) — Reference date in `YYYY-MM-DD` format. Defaults to today."
+					},
+					"response": [
+						{
+							"name": "Sync triggered",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/sync/trigger?date=2026-03-10",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sync",
+										"trigger"
+									],
+									"query": [
+										{
+											"key": "date",
+											"value": "2026-03-10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"execution_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"message\": \"sync triggered\"\n}"
+						},
+						{
+							"name": "Sync triggered — default date",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/sync/trigger",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sync",
+										"trigger"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"execution_id\": \"f6a7b8c9-d0e1-2345-fghi-678901234567\",\n  \"message\": \"sync triggered\"\n}"
+						}
+					]
+				}
+			]
+		}
+	]
+}
