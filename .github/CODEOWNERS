@@ -1,6 +1,17 @@
-# Default: tc-backend code owners team reviews everything
-* @ptm-development/code-owners-tc-backend
+# Repository owner — all reviews require admin approval
+* @Garbiati
 
-# Python-specific reviews
-src/ @ptm-development/python-devs
-tests/ @ptm-development/python-devs
+# Backend (Python)
+src/ @Garbiati
+tests/ @Garbiati
+
+# Frontend (Admin UI)
+admin/ @Garbiati
+
+# Specs and documentation
+docs/ @Garbiati
+
+# Infrastructure and CI
+.github/ @Garbiati
+docker/ @Garbiati
+docker-compose.yml @Garbiati

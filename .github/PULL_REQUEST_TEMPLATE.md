@@ -21,6 +21,8 @@
 - [ ] New tests added for new functionality
 - [ ] Lint passes (`ruff check src/ tests/`)
 - [ ] SAST passes (`bandit -c pyproject.toml -r src/`)
+- [ ] Frontend lint passes (`pnpm --prefix admin lint`)
+- [ ] Frontend tests pass (`pnpm --prefix admin test`)
 
 ## Spec Compliance
 
@@ -33,5 +35,7 @@
 - [ ] No PII exposed in logs or responses
 - [ ] No secrets committed (`.env`, credentials)
 - [ ] Code and comments in English
+- [ ] Documentation in Portuguese (pt-BR)
 - [ ] Conventional commit messages used
-- [ ] Branch created from `master` (or explicitly stated otherwise)
+- [ ] Branch created from `main` (or explicitly stated otherwise)
+- [ ] No AI agent attribution in commits or PR description

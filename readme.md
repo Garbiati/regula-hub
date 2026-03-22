@@ -324,7 +324,7 @@ postman/
 
 ### GitHub Actions
 
-Pipeline em `.github/workflows/ci.yml`, executado em PRs para `dev`, `staging`, `master` e pushes em `dev`.
+Pipeline em `.github/workflows/ci.yml`, executado em PRs para `develop`, `staging`, `main` e pushes em `develop`.
 
 **Job Backend:**
 1. Lint (Ruff)
@@ -376,11 +376,24 @@ Antes de qualquer modificação, leia estes documentos na ordem:
 |-----------|-----------|
 | [`SOBRE_O_PROJETO.md`](docs/SOBRE_O_PROJETO.md) | Visão do produto, personas, escopo |
 | [`QA_REPORT.md`](docs/audit/QA_REPORT.md) | Relatório de auditoria de segurança e qualidade |
-| [`PROMOTION_FLOW.md`](docs/workflows/PROMOTION_FLOW.md) | Pipeline de promoção dev → staging → master |
+| [`PROMOTION_FLOW.md`](docs/workflows/PROMOTION_FLOW.md) | Pipeline de promoção develop → staging → main |
 | [`ARCHITECTURE_DIAGRAM.md`](docs/architecture/ARCHITECTURE_DIAGRAM.md) | Diagrama de arquitetura |
 | [`ENGINEERING_GUIDELINES.md`](docs/code-quality/ENGINEERING_GUIDELINES.md) | Diretrizes de engenharia |
 | [`SECURITY_REPORT.md`](docs/code-quality/SECURITY_REPORT.md) | Relatório de segurança |
 | [`docs/specs/features/*.md`](docs/specs/features/) | Specs individuais de features |
+
+---
+
+## Como Contribuir
+
+Leia o guia completo em [`CONTRIBUTING.md`](CONTRIBUTING.md). Resumo:
+
+1. Criar branch de `main` com prefixo convencional (`feat/`, `fix/`, `chore/`, etc.)
+2. Desenvolver seguindo as specs e rodar testes
+3. Abrir PR para `develop` usando o template
+4. Aguardar review e aprovacao do admin
+
+> **Importante:** Somente o administrador do repositorio ([@Garbiati](https://github.com/Garbiati)) pode aprovar e fazer merge de PRs. Veja [`CONTRIBUTING.md`](CONTRIBUTING.md) para detalhes sobre niveis de permissao.
 
 ---
 
@@ -389,11 +402,18 @@ Antes de qualquer modificação, leia estes documentos na ordem:
 ### Branching Strategy
 
 ```
-feature/fix branch → dev → staging → master
+feature/fix branch → develop → staging → main
+                      (QA)      (homolog)  (producao)
 ```
 
-- **Nunca** commitar diretamente em `dev`, `staging` ou `master`
-- Feature branches sempre saem de `master`
+| Branch | Ambiente | Protecao |
+|--------|----------|----------|
+| `main` | Producao | PR obrigatoria, 1 aprovacao (admin), CI obrigatorio, sem force push |
+| `staging` | Homologacao | PR obrigatoria, 1 aprovacao, CI obrigatorio, sem force push |
+| `develop` | Desenvolvimento | PR obrigatoria, 1 aprovacao, CI obrigatorio, sem force push |
+
+- **Nunca** commitar diretamente em `develop`, `staging` ou `main`
+- Feature branches sempre saem de `main`
 - Prefixos: `feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, `test/`
 
 ### Commit Conventions
@@ -409,11 +429,11 @@ refactor: extract phone parsing to utility
 
 ### PR Flow
 
-1. Criar branch de `master` → PR para `dev`
-2. Review + merge → PR de `dev` para `staging`
-3. Validação → PR de `staging` para `master`
+1. Criar branch de `main` → PR para `develop`
+2. Review + merge → PR de `develop` para `staging`
+3. Validacao → PR de `staging` para `main`
 
-Template de PR em `.github/PULL_REQUEST_TEMPLATE.md`. Detalhes do fluxo de promoção em [`PROMOTION_FLOW.md`](docs/workflows/PROMOTION_FLOW.md).
+Template de PR em `.github/PULL_REQUEST_TEMPLATE.md`. Detalhes do fluxo de promocao em [`PROMOTION_FLOW.md`](docs/workflows/PROMOTION_FLOW.md).
 
 ---
 

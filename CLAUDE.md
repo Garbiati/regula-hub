@@ -184,12 +184,12 @@ Key commands: `pnpm --prefix admin dev`, `pnpm --prefix admin build`, `pnpm --pr
 ### Branching Strategy
 
 ```text
-feature/fix branch → dev → staging → master
+feature/fix branch → develop → staging → main
 ```
 
-- **Feature branches** always branch from `master` (unless explicitly told to use `dev` or `staging`)
-- **NEVER** commit directly to `dev`, `staging`, or `master`
-- **NEVER** push directly to `dev`, `staging`, or `master`
+- **Feature branches** always branch from `main` (unless explicitly told to use `develop` or `staging`)
+- **NEVER** commit directly to `develop`, `staging`, or `main`
+- **NEVER** push directly to `develop`, `staging`, or `main`
 - Always create a feature/fix/chore branch first, then open a PR
 
 ### Branch Naming
@@ -205,9 +205,9 @@ Use conventional prefixes:
 
 ### PR Flow
 
-1. Create branch from `master` → PR to `dev`
-2. After review/merge → PR from `dev` to `staging`
-3. After validation → PR from `staging` to `master`
+1. Create branch from `main` → PR to `develop`
+2. After review/merge → PR from `develop` to `staging`
+3. After validation → PR from `staging` to `main`
 
 ### Commit Messages
 
@@ -237,7 +237,7 @@ When creating a PR with `gh pr create`, ALWAYS include:
 Example:
 
 ```bash
-gh pr create --base dev \
+gh pr create --base develop \
   --title "feat: add procedure code filtering" \
   --label enhancement \
   --body "$(cat <<'EOF'
@@ -247,21 +247,21 @@ EOF
 )"
 ```
 
-### Promotion PRs (`promotion-dev-to-master`)
+### Promotion PRs (`promotion-dev-to-main`)
 
-When the user says `promotion-dev-to-master` or `promotion-dev-to-master-y`, execute the full promotion pipeline (dev → staging → master). Read **[docs/workflows/PROMOTION_FLOW.md](docs/workflows/PROMOTION_FLOW.md)** for the complete procedure, templates, and rules.
+When the user says `promotion-dev-to-main` or `promotion-dev-to-main-y`, execute the full promotion pipeline (develop → staging → main). Read **[docs/workflows/PROMOTION_FLOW.md](docs/workflows/PROMOTION_FLOW.md)** for the complete procedure, templates, and rules.
 
-| Command | dev → staging | staging → master |
-|---------|---------------|------------------|
-| `promotion-dev-to-master` | auto-merge | **manual** (developer approves and merges) |
-| `promotion-dev-to-master-y` | auto-merge | **auto-merge** (full pipeline, no stops) |
+| Command | develop → staging | staging → main |
+|---------|---------------|----------------|
+| `promotion-dev-to-main` | auto-merge | **manual** (developer approves and merges) |
+| `promotion-dev-to-main-y` | auto-merge | **auto-merge** (full pipeline, no stops) |
 
 Key rules:
 - **ALWAYS** use merge commit — **NEVER** squash (preserves history across environments)
 - **ALWAYS** include the `promotion` label + all labels from original PRs
 - Promotion PRs use a dedicated template (NOT the feature PR template)
 - Title format: `promote: {source} to {target} — {summary} (PR #N, #M)`
-- staging → master PRs include a **PR Chain** traceability table
+- staging → main PRs include a **PR Chain** traceability table
 
 ## Docker Compose
 
