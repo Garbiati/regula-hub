@@ -275,6 +275,7 @@ class IntegrationDepartment(Base):
     cnes_code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
     group_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     department_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    department_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_remote: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

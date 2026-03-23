@@ -217,8 +217,10 @@ async def _enrich_appointments(
         await asyncio.gather(*[_lookup(cns) for cns in unique_cns])
         logger.info("Worker CADSUS: %d/%d enriched", len(cadsus_results), len(unique_cns))
 
-    # ── SisReg detail for confirmationKey (sequential, single session) ──
-    detail_results: dict[str, str] = {}  # solicitacao → confirmationKey
+    # ── SisReg detail for confirmationKey + executor department (sequential) ──
+    from regulahub.sisreg.models import AppointmentDetail
+
+    detail_results: dict[str, AppointmentDetail] = {}  # solicitacao → full detail
     codes = [row.solicitacao for row in rows if row.solicitacao]
 
     if codes and videofonista_credentials:
@@ -229,8 +231,8 @@ async def _enrich_appointments(
                 for code in codes:
                     try:
                         detail = await client.detail(code)
-                        if detail and detail.confirmation_key:
-                            detail_results[code] = detail.confirmation_key
+                        if detail:
+                            detail_results[code] = detail
                     except Exception:
                         logger.warning("Worker detail failed for code %s", code)
         except SisregLoginError:
@@ -238,7 +240,7 @@ async def _enrich_appointments(
         except Exception:
             logger.exception("Worker detail session failed for %s", user_hash)
 
-        logger.info("Worker detail: %d/%d got confirmationKey", len(detail_results), len(codes))
+        logger.info("Worker detail: %d/%d fetched", len(detail_results), len(codes))
 
     # ── Build enriched appointment dicts with resolved mappings ──
     from zoneinfo import ZoneInfo
@@ -248,7 +250,8 @@ async def _enrich_appointments(
 
     for row in rows:
         cadsus = cadsus_results.get(row.cns, {})
-        confirmation_key = detail_results.get(row.solicitacao, "")
+        detail = detail_results.get(row.solicitacao)
+        confirmation_key = detail.confirmation_key if detail else ""
 
         # Resolve procedure by name
         proc = procedures.get(row.descricao_procedimento.upper().strip())
@@ -256,43 +259,52 @@ async def _enrich_appointments(
             logger.warning("Procedure not mapped: %s (code %s)", row.descricao_procedimento, row.solicitacao)
             continue
 
-        # Resolve department by name (unidade_fantasia from CSV)
-        dept = departments.get(row.unidade_fantasia.upper().strip())
-
-        # Resolve group_id and location
+        # ── Resolve group_id using EXECUTOR department (from SisReg detail) ──
+        # The regulation-service uses detail.DepartmentExecute to find the executor
+        # and maps it to group_id. For PARTIALINTEGRATION, it uses the SOLICITING
+        # department's CNES to resolve via execution_mapping.
         group_id = ""
         location = ""
-        is_remote = True  # Default to ONLINE for unmapped departments
+        is_remote = True
 
-        if dept:
-            group_id = str(dept.group_id)
-            is_remote = dept.is_remote
-            location = row.unidade_fantasia
+        executor_name = (detail.department or "").upper().strip() if detail else ""
+        soliciting_cnes = detail.req_unit_cnes or row.cnes_solicitante or "" if detail else row.cnes_solicitante
+        soliciting_cnes = soliciting_cnes.strip() if soliciting_cnes else ""
 
-            # For PARTIALINTEGRATION, resolve via execution_mapping by requester CNES
-            if dept.department_type == "PARTIALINTEGRATION" and row.cnes_solicitante:
-                mapping = execution_mappings.get(row.cnes_solicitante)
+        executor_dept = departments.get(executor_name) if executor_name else None
+
+        if executor_dept:
+            if executor_dept.department_type == "PARTIALINTEGRATION" and soliciting_cnes:
+                mapping = execution_mappings.get(soliciting_cnes)
                 if mapping:
                     group_id = str(mapping.group_id)
-                    location = mapping.executor_address or row.unidade_fantasia
-                    is_remote = True  # PARTIALINTEGRATION = remote
-        else:
-            # Department not in our mapping — try execution_mapping by requester CNES
-            mapping = execution_mappings.get(row.cnes_solicitante) if row.cnes_solicitante else None
-            if mapping:
-                group_id = str(mapping.group_id)
-                location = mapping.executor_address or row.unidade_fantasia
-            else:
-                # Fallback: use AMBULATORIO VIRTUAL DO AMAZONAS (ONLINE teleconsultation)
-                # TODO: refactor — This fallback is Saude AM Digital specific
-                fallback_dept = departments.get("AMBULATORIO VIRTUAL DO AMAZONAS")
-                if fallback_dept:
-                    group_id = str(fallback_dept.group_id)
-                    location = row.unidade_fantasia
+                    loc_addr = mapping.executor_address or ""
+                    location = f"{mapping.executor_name} - {loc_addr}" if loc_addr else mapping.executor_name
                     is_remote = True
                 else:
-                    logger.warning("Department not mapped: %s (code %s)", row.unidade_fantasia, row.solicitacao)
-                    continue
+                    group_id = str(executor_dept.group_id)
+                    location = executor_dept.department_name
+                    is_remote = True
+            else:
+                group_id = str(executor_dept.group_id)
+                is_remote = executor_dept.is_remote
+                addr = getattr(executor_dept, "department_address", "") or ""
+                location = f"{executor_dept.department_name} - {addr}" if addr else executor_dept.department_name
+        elif soliciting_cnes:
+            mapping = execution_mappings.get(soliciting_cnes)
+            if mapping:
+                group_id = str(mapping.group_id)
+                loc_addr = mapping.executor_address or ""
+                location = f"{mapping.executor_name} - {loc_addr}" if loc_addr else mapping.executor_name
+            else:
+                logger.warning(
+                    "No executor mapping for code %s (executor=%s, sol_cnes=%s)",
+                    row.solicitacao, executor_name, soliciting_cnes,
+                )
+                continue
+        else:
+            logger.warning("No detail/executor for code %s", row.solicitacao)
+            continue
 
         if not group_id:
             logger.warning("No group_id for code %s", row.solicitacao)
