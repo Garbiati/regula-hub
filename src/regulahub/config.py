@@ -117,3 +117,20 @@ class CadsusSettings(BaseSettings):
 @lru_cache
 def get_cadsus_settings() -> CadsusSettings:
     return CadsusSettings()
+
+
+class IntegrationSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    integration_api_key: str = Field("", description="API key for integration system (Core API + Auth API)")
+    integration_core_api_url: str = Field(
+        "https://api.sosportal.com.br/api/core/v1", description="Core API base URL"
+    )
+    integration_auth_api_url: str = Field(
+        "https://api.sosportal.com.br/api/auth/v1", description="Auth API base URL"
+    )
+
+
+@lru_cache
+def get_integration_settings() -> IntegrationSettings:
+    return IntegrationSettings()

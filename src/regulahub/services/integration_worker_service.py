@@ -12,7 +12,6 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from regulahub.db.models import System, SystemEndpoint
 from regulahub.db.repositories.credential import CredentialRepository
 from regulahub.db.repositories.integration_execution import IntegrationExecutionRepository
 from regulahub.db.repositories.regulation_system import RegulationSystemRepository
@@ -173,92 +172,189 @@ async def _fetch_appointments(
     return merged
 
 
-async def _enrich_with_cadsus(
+async def _enrich_appointments(
     rows: list[ScheduleExportRow],
+    credentials: list[tuple[str, str]],
+    departments: dict[str, object],
+    procedures: dict[str, object],
+    execution_mappings: dict[str, object],
     progress: ExecutionProgress,
-) -> list[EnrichedAppointment]:
-    """Enrich export rows with CADSUS patient data (CPF, phone, email, mother/father names).
+) -> list[dict]:
+    """Enrich export rows: CADSUS (CPF/phone) + SisReg detail (confirmationKey) + mapping resolution.
 
-    Uses the same CADSUS client as the agendamentos page enrichment.
+    Returns list of dicts ready for IntegrationPushClient.process_appointment().
     """
     if not rows:
         return []
 
     progress.stage = "enriching"
 
+    # ── CADSUS enrichment (parallel) ──
     from regulahub.config import get_cadsus_settings
     from regulahub.integrations.cadsus_client import CadsusClient
 
     settings = get_cadsus_settings()
     cadsus_results: dict[str, dict] = {}
-
-    # Extract unique CNS
     unique_cns = list({row.cns for row in rows if row.cns})
 
     if unique_cns and settings.cadsus_enabled:
-        cadsus = CadsusClient(settings=settings)
+        cadsus_client = CadsusClient(settings=settings)
         semaphore = asyncio.Semaphore(40)
 
         async def _lookup(cns: str) -> None:
             async with semaphore:
-                patient = await cadsus.get_patient_by_cns(cns)
+                patient = await cadsus_client.get_patient_by_cns(cns)
                 if patient and patient.cpf:
                     cadsus_results[cns] = {
                         "cpf": patient.cpf or "",
                         "phone": patient.phone or "",
-                        "email": patient.email or "",
                         "mother_name": patient.mother_name or "",
-                        "father_name": patient.father_name or "",
+                        "birth_date": patient.birth_date or "",
                     }
 
-        logger.info("Worker CADSUS enrichment: %d unique CNS", len(unique_cns))
+        logger.info("Worker CADSUS: %d unique CNS", len(unique_cns))
         await asyncio.gather(*[_lookup(cns) for cns in unique_cns])
         logger.info("Worker CADSUS: %d/%d enriched", len(cadsus_results), len(unique_cns))
 
-    # Build enriched appointments from export rows + CADSUS data
-    enriched: list[EnrichedAppointment] = []
+    # ── SisReg detail for confirmationKey (sequential, single session) ──
+    detail_results: dict[str, str] = {}  # solicitacao → confirmationKey
+    codes = [row.solicitacao for row in rows if row.solicitacao]
+
+    if codes and credentials:
+        username, password = credentials[0]
+        user_hash = mask_username(username)
+        try:
+            async with SisregClient(SISREG_BASE_URL, username, password, "EXECUTANTE/SOLICITANTE") as client:
+                for code in codes:
+                    try:
+                        detail = await client.detail(code)
+                        if detail and detail.confirmation_key:
+                            detail_results[code] = detail.confirmation_key
+                    except Exception:
+                        logger.warning("Worker detail failed for code %s", code)
+        except SisregLoginError:
+            logger.warning("Worker detail login failed for %s", user_hash)
+        except Exception:
+            logger.exception("Worker detail session failed for %s", user_hash)
+
+        logger.info("Worker detail: %d/%d got confirmationKey", len(detail_results), len(codes))
+
+    # ── Build enriched appointment dicts with resolved mappings ──
+    from zoneinfo import ZoneInfo
+
+    manaus_tz = ZoneInfo("America/Manaus")
+    enriched: list[dict] = []
+
     for row in rows:
         cadsus = cadsus_results.get(row.cns, {})
-        enriched.append(
-            EnrichedAppointment(
-                code=row.solicitacao,
-                patient_cns=row.cns,
-                patient_name=row.nome,
-                patient_cpf=cadsus.get("cpf", ""),
-                patient_birth_date=row.dt_nascimento,
-                patient_mother_name=cadsus.get("mother_name", row.nome_mae),
-                patient_phone=cadsus.get("phone", row.telefone),
-                patient_phone_ddd="",
-                doctor_name=row.nome_profissional_executante,
-                appointment_date=f"{row.data_agendamento} {row.hr_agendamento}".strip(),
-                procedure=row.descricao_procedimento,
-                department=row.unidade_fantasia,
-                department_solicitation=row.mun_solicitante,
-                confirmation_key="",
-                status=row.situacao,
-            )
-        )
+        confirmation_key = detail_results.get(row.solicitacao, "")
+
+        # Resolve department by name (unidade_fantasia from CSV)
+        dept = departments.get(row.unidade_fantasia.upper().strip())
+        # Resolve procedure by name
+        proc = procedures.get(row.descricao_procedimento.upper().strip())
+
+        if not dept:
+            logger.warning("Department not mapped: %s (code %s)", row.unidade_fantasia, row.solicitacao)
+            continue
+        if not proc:
+            logger.warning("Procedure not mapped: %s (code %s)", row.descricao_procedimento, row.solicitacao)
+            continue
+
+        # For PARTIALINTEGRATION departments, resolve group_id from execution mapping
+        group_id = str(dept.group_id)
+        location = ""
+        if dept.department_type == "PARTIALINTEGRATION" and row.cnes_solicitante:
+            mapping = execution_mappings.get(row.cnes_solicitante)
+            if mapping:
+                group_id = str(mapping.group_id)
+                location = mapping.executor_address or ""
+            else:
+                logger.warning(
+                    "Execution mapping not found for CNES %s (code %s)", row.cnes_solicitante, row.solicitacao,
+                )
+                continue
+
+        if not location:
+            location = row.unidade_fantasia
+
+        # Parse appointment date/time → ISO 8601 Manaus timezone
+        start_date_str = ""
+        end_date_str = ""
+        try:
+            from datetime import datetime as dt_cls
+
+            date_str = row.data_agendamento.replace(".", "/")  # SisReg uses dots sometimes
+            time_str = row.hr_agendamento or "00:00"
+            parsed = dt_cls.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+            start_dt = parsed.replace(tzinfo=manaus_tz)
+            end_dt = start_dt.replace(minute=start_dt.minute + 30)  # 30-min default slot
+            start_date_str = start_dt.isoformat()
+            end_date_str = end_dt.isoformat()
+        except (ValueError, AttributeError):
+            logger.warning("Invalid date for code %s: %s %s", row.solicitacao, row.data_agendamento, row.hr_agendamento)
+            continue
+
+        # Split patient name
+        name_parts = row.nome.strip().split(" ", 1) if row.nome else ["", ""]
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+        # Birth date: prefer CADSUS, fallback to CSV (ensure dd/MM/yyyy format)
+        birth_date = cadsus.get("birth_date", "") or row.dt_nascimento or ""
+
+        # Phone: prefer CADSUS, fallback to CSV, default to 00000000000
+        phone = cadsus.get("phone", "") or row.telefone or "00000000000"
+
+        # Preference of service
+        preference = "ONLINE" if dept.is_remote else "PRESENCIAL"
+
+        enriched.append({
+            "code": row.solicitacao,
+            "external_id": f"{row.solicitacao}-{confirmation_key}" if confirmation_key else row.solicitacao,
+            "confirmation_key": confirmation_key,
+            "patient_cns": row.cns,
+            "patient_cpf": cadsus.get("cpf", ""),
+            "patient_first_name": first_name,
+            "patient_last_name": last_name,
+            "patient_birth_date": birth_date,
+            "patient_mother_name": cadsus.get("mother_name", "") or row.nome_mae or "",
+            "patient_phone": phone,
+            "doctor_name": row.nome_profissional_executante,
+            "group_id": group_id,
+            "work_scale_name": proc.work_scale_name,
+            "preference_of_service": preference,
+            "location_of_service": location,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+        })
 
     progress.total_enriched = len(cadsus_results)
+    logger.info("Worker enrichment complete: %d appointments ready for push", len(enriched))
     return enriched
 
 
 async def _push_to_integration(
-    enriched: list[EnrichedAppointment],
-    system: System,
-    endpoints: list[SystemEndpoint],
-    api_key: str | None,
+    enriched: list[dict],
+    api_key: str,
     progress: ExecutionProgress,
 ) -> BatchPushResult:
     """Push enriched appointments to the integration system."""
+    from regulahub.config import get_integration_settings
+
     progress.stage = "pushing"
     batch_result = BatchPushResult(total=len(enriched))
+    settings = get_integration_settings()
 
-    async with IntegrationPushClient(system, endpoints, api_key=api_key) as client:
+    async with IntegrationPushClient(
+        core_api_base_url=settings.integration_core_api_url,
+        auth_api_base_url=settings.integration_auth_api_url,
+        api_key=api_key,
+    ) as client:
         for appointment in enriched:
             if progress.cancelled:
                 break
-            result = await client.process_appointment(appointment.to_dict())
+            result = await client.process_appointment(appointment)
             batch_result.results.append(result)
             if result.success:
                 batch_result.pushed += 1
@@ -266,40 +362,9 @@ async def _push_to_integration(
             else:
                 batch_result.failed += 1
                 progress.total_failed = batch_result.failed
+                logger.warning("Push failed for %s: %s", appointment.get("code"), result.error)
 
     return batch_result
-
-
-async def _resolve_integration_system(
-    db_session: AsyncSession,
-    system_code: str,
-) -> tuple[System, list[SystemEndpoint]]:
-    """Resolve integration system and its endpoints from DB."""
-    repo = RegulationSystemRepository(db_session)
-    system = await repo.get_by_code(system_code)
-    if not system:
-        raise RuntimeError(f"Integration system '{system_code}' not found")
-
-    endpoints = await repo.get_endpoints_for_system(system.id)
-    if not endpoints:
-        raise RuntimeError(f"No endpoints configured for system '{system_code}'")
-
-    return system, endpoints
-
-
-async def _resolve_integration_api_key(
-    db_session: AsyncSession,
-    system_code: str,
-) -> str | None:
-    """Resolve API key for the integration system from credentials."""
-    repo = CredentialRepository(db_session)
-    creds = await repo.get_active_by_system_and_profile(system_code, "API_CLIENT")
-    if creds:
-        try:
-            return decrypt_password(creds[0].encrypted_password)
-        except ValueError:
-            logger.warning("Failed to decrypt integration API key for %s", system_code)
-    return None
 
 
 async def execute_integration(
@@ -310,9 +375,12 @@ async def execute_integration(
 ) -> None:
     """Main worker pipeline — runs as a background task with its own DB session.
 
-    Pipeline: resolve credentials → export schedules → filter teleconsulta → enrich CADSUS → push.
+    Pipeline: resolve credentials → export schedules → filter teleconsulta →
+    enrich (CADSUS + detail + mappings) → push to integration system.
     """
+    from regulahub.config import get_integration_settings
     from regulahub.db.engine import get_session_factory
+    from regulahub.db.repositories.integration_mapping import IntegrationMappingRepository
 
     progress = ExecutionProgress(
         execution_id=execution_id,
@@ -321,30 +389,47 @@ async def execute_integration(
         started_at=datetime.now(UTC),
     )
     _active_executions[execution_id] = progress
-
     session_factory = get_session_factory()
 
     try:
+        # ── Step 0: Resolve credentials, mappings, and API config ──
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
             progress.status = "running"
             await repo.update_status(
-                execution_id,
-                "running",
-                started_at=progress.started_at,
-                progress_data=progress.to_dict(),
+                execution_id, "running", started_at=progress.started_at, progress_data=progress.to_dict(),
             )
             await db_session.commit()
 
-            # Step 1: Resolve credentials and integration system
             credentials = await _resolve_credentials(db_session)
-            system, endpoints = await _resolve_integration_system(db_session, system_code)
-            api_key = await _resolve_integration_api_key(db_session, system_code)
+
+            # Load all mappings into memory for fast lookup
+            mapping_repo = IntegrationMappingRepository(db_session)
+            dept_list = await mapping_repo.list_all_departments()
+            proc_list = await mapping_repo.list_all_procedures()
+
+            # Build lookup dicts (case-insensitive by uppercase name)
+            departments = {d.department_name.upper().strip(): d for d in dept_list}
+            procedures = {p.procedure_name.upper().strip(): p for p in proc_list}
+
+            # Execution mappings — load all into dict keyed by requester_cnes
+            from regulahub.db.models import IntegrationExecutionMapping  # noqa: I001
+            from sqlalchemy import select
+
+            stmt = select(IntegrationExecutionMapping).where(IntegrationExecutionMapping.is_active.is_(True))
+            result = await db_session.execute(stmt)
+            all_mappings = list(result.scalars().all())
+            execution_mappings = {m.requester_cnes: m for m in all_mappings}
+
+        integration_settings = get_integration_settings()
+        api_key = integration_settings.integration_api_key
+        if not api_key:
+            raise RuntimeError("INTEGRATION_API_KEY not configured")
 
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 2: Fetch teleconsulta appointments via schedule export
+        # ── Step 1: Fetch teleconsulta appointments ──
         rows = await _fetch_appointments(credentials, date_from, date_to, progress)
 
         async with session_factory() as db_session:
@@ -355,8 +440,8 @@ async def execute_integration(
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 3: Enrich with CADSUS
-        enriched = await _enrich_with_cadsus(rows, progress)
+        # ── Step 2: Enrich (CADSUS + detail + mappings) ──
+        enriched = await _enrich_appointments(rows, credentials, departments, procedures, execution_mappings, progress)
 
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
@@ -366,10 +451,10 @@ async def execute_integration(
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 4: Push to integration system
-        batch_result = await _push_to_integration(enriched, system, endpoints, api_key, progress)
+        # ── Step 3: Push to integration system ──
+        batch_result = await _push_to_integration(enriched, api_key, progress)
 
-        # Step 5: Complete
+        # ── Step 4: Complete ──
         progress.status = "completed"
         progress.stage = "complete"
         progress.completed_at = datetime.now(UTC)
@@ -377,24 +462,16 @@ async def execute_integration(
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
             await repo.update_status(
-                execution_id,
-                "completed",
-                total_fetched=progress.total_fetched,
-                total_enriched=progress.total_enriched,
-                total_pushed=batch_result.pushed,
-                total_failed=batch_result.failed,
-                progress_data=progress.to_dict(),
-                completed_at=progress.completed_at,
+                execution_id, "completed",
+                total_fetched=progress.total_fetched, total_enriched=progress.total_enriched,
+                total_pushed=batch_result.pushed, total_failed=batch_result.failed,
+                progress_data=progress.to_dict(), completed_at=progress.completed_at,
             )
             await db_session.commit()
 
         logger.info(
-            "Worker execution %s completed: fetched=%d, enriched=%d, pushed=%d, failed=%d",
-            execution_id,
-            progress.total_fetched,
-            progress.total_enriched,
-            batch_result.pushed,
-            batch_result.failed,
+            "Worker %s completed: fetched=%d, enriched=%d, pushed=%d, failed=%d",
+            execution_id, progress.total_fetched, progress.total_enriched, batch_result.pushed, batch_result.failed,
         )
 
     except asyncio.CancelledError:
@@ -403,17 +480,13 @@ async def execute_integration(
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
             await repo.update_status(
-                execution_id,
-                "cancelled",
-                total_fetched=progress.total_fetched,
-                total_enriched=progress.total_enriched,
-                total_pushed=progress.total_pushed,
-                total_failed=progress.total_failed,
-                progress_data=progress.to_dict(),
-                completed_at=progress.completed_at,
+                execution_id, "cancelled",
+                total_fetched=progress.total_fetched, total_enriched=progress.total_enriched,
+                total_pushed=progress.total_pushed, total_failed=progress.total_failed,
+                progress_data=progress.to_dict(), completed_at=progress.completed_at,
             )
             await db_session.commit()
-        logger.info("Worker execution %s cancelled", execution_id)
+        logger.info("Worker %s cancelled", execution_id)
 
     except Exception as exc:
         progress.status = "failed"
@@ -422,18 +495,13 @@ async def execute_integration(
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
             await repo.update_status(
-                execution_id,
-                "failed",
-                error_message=str(exc),
-                total_fetched=progress.total_fetched,
-                total_enriched=progress.total_enriched,
-                total_pushed=progress.total_pushed,
-                total_failed=progress.total_failed,
-                progress_data=progress.to_dict(),
-                completed_at=progress.completed_at,
+                execution_id, "failed", error_message=str(exc),
+                total_fetched=progress.total_fetched, total_enriched=progress.total_enriched,
+                total_pushed=progress.total_pushed, total_failed=progress.total_failed,
+                progress_data=progress.to_dict(), completed_at=progress.completed_at,
             )
             await db_session.commit()
-        logger.exception("Worker execution %s failed", execution_id)
+        logger.exception("Worker %s failed", execution_id)
 
 
 # Store for background tasks so they don't get garbage collected
