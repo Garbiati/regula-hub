@@ -43,6 +43,11 @@ function systemChildren(code: string): { labelKey: string; path: string; icon: s
         path: `/${meta.route}/integrations`,
         icon: "Plug",
       },
+      {
+        labelKey: "nav.sisreg_appointments",
+        path: `/${meta.route}/integrations/appointments`,
+        icon: "ClipboardList",
+      },
     );
   }
   return children;
@@ -130,6 +135,11 @@ export function buildSystemPages(systems: RegulationSystem[]): Record<string, Sy
           labelKey: "nav.sisreg_integrations",
           path: `/${s.routeSegment}/integrations`,
           icon: "Plug",
+        },
+        {
+          labelKey: "nav.sisreg_appointments",
+          path: `/${s.routeSegment}/integrations/appointments`,
+          icon: "ClipboardList",
         },
       );
     }
