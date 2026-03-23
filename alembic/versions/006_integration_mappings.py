@@ -405,7 +405,9 @@ def upgrade() -> None:
     # ══════════════════════════════════════════════════════════════════
 
     # Delete the 6 placeholder endpoints from migration 001
-    op.execute(sa.text("DELETE FROM system_endpoints WHERE system_id = :sid::uuid").bindparams(sid=str(SAUDE_AM_DIGITAL_ID)))
+    op.execute(
+        sa.text(f"DELETE FROM system_endpoints WHERE system_id = '{SAUDE_AM_DIGITAL_ID}'::uuid")
+    )
 
     # Insert the 7 correct endpoints
     endpoints_table = sa.table(
@@ -511,7 +513,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     # ── Restore original Saude AM Digital endpoints ───────────────────
     # Delete the 7 corrected endpoints
-    op.execute(sa.text("DELETE FROM system_endpoints WHERE system_id = :sid::uuid").bindparams(sid=str(SAUDE_AM_DIGITAL_ID)))
+    op.execute(
+        sa.text(f"DELETE FROM system_endpoints WHERE system_id = '{SAUDE_AM_DIGITAL_ID}'::uuid")
+    )
 
     # Re-insert the original 6 placeholder endpoints from migration 001
     endpoints_table = sa.table(
