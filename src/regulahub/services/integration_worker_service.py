@@ -307,12 +307,17 @@ async def _enrich_appointments(
             date_str = row.data_agendamento.replace(".", "/")  # SisReg uses dots sometimes
             time_str = row.hr_agendamento or "00:00"
             parsed = dt_cls.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+            from datetime import timedelta as td
+
             start_dt = parsed.replace(tzinfo=manaus_tz)
-            end_dt = start_dt.replace(minute=start_dt.minute + 30)  # 30-min default slot
+            end_dt = start_dt + td(minutes=30)  # 30-min default slot
             start_date_str = start_dt.isoformat()
             end_date_str = end_dt.isoformat()
-        except (ValueError, AttributeError):
-            logger.warning("Invalid date for code %s: %s %s", row.solicitacao, row.data_agendamento, row.hr_agendamento)
+        except (ValueError, AttributeError) as exc:
+            logger.warning(
+                "Invalid date for code %s: '%s' '%s' — %s",
+                row.solicitacao, row.data_agendamento, row.hr_agendamento, exc,
+            )
             continue
 
         # Split patient name
