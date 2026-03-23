@@ -6,7 +6,7 @@ types (JSONB, UUID) for optimal production performance.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     JSON,
@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     UniqueConstraint,
     Uuid,
 )
@@ -256,6 +257,62 @@ class IntegrationExecution(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     updated_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+
+
+class IntegrationAppointment(Base):
+    """Individual appointment record pushed to an integration system."""
+
+    __tablename__ = "integration_appointments"
+    __table_args__ = (
+        Index("idx_intappt_system", "integration_system_id"),
+        Index("idx_intappt_execution", "execution_id"),
+        Index("idx_intappt_regulation_code", "regulation_code"),
+        Index("idx_intappt_external_id", "external_id", unique=True, postgresql_where="external_id IS NOT NULL"),
+        Index("idx_intappt_status", "status"),
+        Index("idx_intappt_date", "appointment_date"),
+        Index("idx_intappt_reference_date", "reference_date"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    integration_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("systems.id", ondelete="RESTRICT"), nullable=False
+    )
+    execution_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("integration_executions.id", ondelete="SET NULL"), nullable=True
+    )
+    # Regulation identifiers
+    regulation_code: Mapped[str] = mapped_column(String(30), nullable=False)
+    confirmation_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Patient data
+    patient_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    patient_cpf: Mapped[str | None] = mapped_column(String(14), nullable=True)
+    patient_cns: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    patient_birth_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    patient_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    patient_mother_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Appointment data
+    appointment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    appointment_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    procedure_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    department_executor: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    department_executor_cnes: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    department_solicitor: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    department_solicitor_cnes: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    doctor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    doctor_cpf: Mapped[str | None] = mapped_column(String(14), nullable=True)
+    # Status tracking
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Integration metadata
+    integration_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    source_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Reference and lifecycle
+    reference_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
 
 
 class IntegrationDepartment(Base):

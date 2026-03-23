@@ -27,11 +27,14 @@ class PushResult:
     code: str
     success: bool
     patient_id: str = ""
+    appointment_id: str = ""
+    is_new_account: bool = False
     patient_created: bool = False
     patient_updated: bool = False
     appointment_created: bool = False
     appointment_skipped: bool = False
     error: str | None = None
+    error_category: str = ""  # patient, appointment, mapping, data, network
 
 
 @dataclasses.dataclass
@@ -279,6 +282,7 @@ class IntegrationPushClient:
             group_id = appointment.get("group_id", "")
             if not group_id:
                 result.error = "Missing group_id (department not mapped)"
+                result.error_category = "mapping"
                 return result
 
             patient_id = None
@@ -301,6 +305,7 @@ class IntegrationPushClient:
                 birth_date = appointment.get("patient_birth_date", "")
                 if not birth_date:
                     result.error = "Missing patient birth date"
+                    result.error_category = "data"
                     return result
 
                 patient_id = await self.register_patient(
@@ -316,11 +321,13 @@ class IntegrationPushClient:
                 )
                 if not patient_id:
                     result.error = "Failed to register patient"
+                    result.error_category = "patient"
                     return result
                 result.patient_created = True
                 is_new_account = True
 
             result.patient_id = patient_id
+            result.is_new_account = is_new_account
 
             # ── Step 2: Resolve doctor (non-blocking) ──
             doctor_name = appointment.get("doctor_name", "")
@@ -332,12 +339,14 @@ class IntegrationPushClient:
             external_id = appointment.get("external_id", "")
             if not external_id:
                 result.error = "Missing external_id"
+                result.error_category = "data"
                 return result
 
             existing = await self.check_appointment_exists(external_id)
             if existing:
                 result.success = True
                 result.appointment_skipped = True
+                result.appointment_id = existing
                 return result
 
             # ── Step 4: Create appointment ──
@@ -361,8 +370,10 @@ class IntegrationPushClient:
             if appt_id:
                 result.success = True
                 result.appointment_created = True
+                result.appointment_id = appt_id
             else:
                 result.error = "Failed to create appointment"
+                result.error_category = "appointment"
 
         except Exception as exc:
             result.error = str(exc)
