@@ -153,6 +153,29 @@ class RegulationSystemRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def list_integration_systems(self) -> list[System]:
+        """List active integration-type systems."""
+        stmt = (
+            select(System)
+            .join(SystemType, System.system_type_id == SystemType.id)
+            .where(SystemType.code == "integration")
+            .where(System.is_active.is_(True))
+            .order_by(System.code)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_endpoints_for_system(self, system_id: uuid.UUID) -> list[SystemEndpoint]:
+        """List all active endpoints for a system."""
+        stmt = (
+            select(SystemEndpoint)
+            .where(SystemEndpoint.system_id == system_id)
+            .where(SystemEndpoint.is_active.is_(True))
+            .order_by(SystemEndpoint.sort_order)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update_endpoint_config(self, endpoint_id: uuid.UUID, config: dict) -> SystemEndpoint | None:
         """Replace the entire config JSONB for an endpoint."""
         stmt = select(SystemEndpoint).where(SystemEndpoint.id == endpoint_id)
