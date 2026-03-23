@@ -1,6 +1,6 @@
 """Integration worker service — fetches SisReg appointments and pushes to integration systems.
 
-Pipeline: resolve credentials → parallel SisReg search → enrich (detail + CadWeb) → push to integration.
+Pipeline: export schedules (same as agendamentos page) → filter teleconsulta → enrich (CADSUS) → push.
 Runs as an in-process async task triggered by the API. Status tracked in-memory + persisted to DB.
 """
 
@@ -8,7 +8,7 @@ import asyncio
 import dataclasses
 import logging
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,13 +18,15 @@ from regulahub.db.repositories.integration_execution import IntegrationExecution
 from regulahub.db.repositories.regulation_system import RegulationSystemRepository
 from regulahub.services.integration_push_client import BatchPushResult, IntegrationPushClient
 from regulahub.sisreg.client import SisregClient, SisregLoginError
-from regulahub.sisreg.models import AppointmentDetail, AppointmentListing, CadwebPatientData, SearchFilters
+from regulahub.sisreg.export_parser import parse_export_csv
+from regulahub.sisreg.models import ScheduleExportRow
 from regulahub.utils.encryption import decrypt_password
 from regulahub.utils.masking import mask_username
 
 logger = logging.getLogger(__name__)
 
 SISREG_BASE_URL = "https://sisregiii.saude.gov.br"
+TELECONSULTA_FILTER = "TELECONSULTA"
 
 
 @dataclasses.dataclass
@@ -32,6 +34,8 @@ class ExecutionProgress:
     """In-memory execution progress for real-time polling."""
 
     execution_id: uuid.UUID
+    date_from: date | None = None
+    date_to: date | None = None
     status: str = "pending"
     stage: str = "initializing"
     total_fetched: int = 0
@@ -86,13 +90,16 @@ class EnrichedAppointment:
         return dataclasses.asdict(self)
 
 
-async def _resolve_credentials(db_session: AsyncSession) -> list[tuple[str, str]]:
-    """Resolve all active VIDEOFONISTA credentials for SISREG."""
+async def _resolve_credentials(
+    db_session: AsyncSession,
+    profile_type: str = "EXECUTANTE/SOLICITANTE",
+) -> list[tuple[str, str]]:
+    """Resolve all active credentials for the given profile type."""
     repo = CredentialRepository(db_session)
-    creds = await repo.get_active_by_system_and_profile("SISREG", "VIDEOFONISTA")
+    creds = await repo.get_active_by_system_and_profile("SISREG", profile_type)
 
     if not creds:
-        raise RuntimeError("No VIDEOFONISTA credentials configured for SISREG")
+        raise RuntimeError(f"No {profile_type} credentials configured for SISREG")
 
     resolved: list[tuple[str, str]] = []
     for cred in creds:
@@ -103,37 +110,9 @@ async def _resolve_credentials(db_session: AsyncSession) -> list[tuple[str, str]
             logger.warning("Failed to decrypt credential for operator %s", mask_username(cred.username))
 
     if not resolved:
-        raise RuntimeError("All VIDEOFONISTA credentials failed decryption")
+        raise RuntimeError(f"All {profile_type} credentials failed decryption")
 
     return resolved
-
-
-async def _search_single_day(
-    username: str,
-    password: str,
-    date_br: str,
-) -> list[AppointmentListing]:
-    """Search SisReg for a single day with a single operator credential."""
-    user_hash = mask_username(username)
-    filters = SearchFilters(
-        date_from=date_br,
-        date_to=date_br,
-        procedure_description="teleconsulta",
-        situation="7",
-        profile_type="VIDEOFONISTA",
-        usernames=[username],
-    )
-    try:
-        async with SisregClient(SISREG_BASE_URL, username, password, "VIDEOFONISTA") as client:
-            result = await client.search(filters)
-            logger.info("Worker search: operator %s, date %s, %d items", user_hash, date_br, len(result.items))
-            return result.items
-    except SisregLoginError:
-        logger.warning("Worker SisReg login failed for operator %s on %s", user_hash, date_br)
-        return []
-    except Exception:
-        logger.exception("Worker SisReg search error for operator %s on %s", user_hash, date_br)
-        return []
 
 
 async def _fetch_appointments(
@@ -141,150 +120,126 @@ async def _fetch_appointments(
     date_from: date,
     date_to: date,
     progress: ExecutionProgress,
-) -> list[AppointmentListing]:
-    """Fetch appointments from SisReg for a date range.
+) -> list[ScheduleExportRow]:
+    """Fetch teleconsulta appointments using SisReg schedule export (same as agendamentos page).
 
-    Searches sequentially per day using a single SisReg session to avoid
-    concurrent login conflicts (SisReg invalidates previous sessions).
+    Uses export_schedule() with all operators in parallel, deduplicates by solicitacao,
+    and filters by teleconsulta procedure.
     """
     progress.stage = "fetching"
 
-    # Generate all dates in range
-    dates: list[date] = []
-    current = date_from
-    while current <= date_to:
-        dates.append(current)
-        current += timedelta(days=1)
+    date_from_br = date_from.strftime("%d/%m/%Y")
+    date_to_br = date_to.strftime("%d/%m/%Y")
+    semaphore = asyncio.Semaphore(5)
 
-    # Search each day sequentially with the first credential
-    username, password = credentials[0]
-    results: list[list[AppointmentListing]] = []
-    for d in dates:
-        items = await _search_single_day(username, password, d.strftime("%d/%m/%Y"))
-        results.append(items)
+    async def _export_single(username: str, password: str) -> list[ScheduleExportRow]:
+        user_hash = mask_username(username)
+        async with semaphore:
+            try:
+                async with SisregClient(SISREG_BASE_URL, username, password, "EXECUTANTE/SOLICITANTE") as client:
+                    raw_bytes = await client.export_schedule(date_from_br, date_to_br)
+                    rows = parse_export_csv(raw_bytes)
+                    logger.info("Worker export: operator %s returned %d rows", user_hash, len(rows))
+                    return rows
+            except SisregLoginError:
+                logger.warning("Worker export login failed for operator %s", user_hash)
+                return []
+            except Exception:
+                logger.exception("Worker export error for operator %s", user_hash)
+                return []
 
-    # Merge and deduplicate by code
-    seen_codes: set[str] = set()
-    merged: list[AppointmentListing] = []
-    for items in results:
-        for item in items:
-            if item.code not in seen_codes:
-                seen_codes.add(item.code)
-                merged.append(item)
+    # Parallel export across all operators
+    tasks = [_export_single(u, p) for u, p in credentials]
+    results = await asyncio.gather(*tasks)
+
+    # Merge, deduplicate by solicitacao, and filter teleconsulta
+    seen: set[str] = set()
+    merged: list[ScheduleExportRow] = []
+    for operator_rows in results:
+        for row in operator_rows:
+            if not row.solicitacao or row.solicitacao in seen:
+                continue
+            # Filter: only teleconsulta procedures
+            if TELECONSULTA_FILTER not in row.descricao_procedimento.upper():
+                continue
+            seen.add(row.solicitacao)
+            merged.append(row)
 
     progress.total_fetched = len(merged)
-    logger.info("Worker fetch: %d unique teleconsulta appointments for %s to %s", len(merged), date_from, date_to)
+    logger.info(
+        "Worker fetch: %d teleconsulta appointments from %d operators for %s to %s",
+        len(merged), len(credentials), date_from, date_to,
+    )
     return merged
 
 
-async def _fetch_details_for_batch(
-    codes: list[str],
-    username: str,
-    password: str,
-    semaphore: asyncio.Semaphore,
-) -> dict[str, tuple[AppointmentDetail, CadwebPatientData | None]]:
-    """Fetch detail + CadWeb for a batch of codes using a single SisReg session."""
-    result: dict[str, tuple[AppointmentDetail, CadwebPatientData | None]] = {}
-    user_hash = mask_username(username)
-    cadweb_cache: dict[str, CadwebPatientData | None] = {}
-
-    async with semaphore:
-        try:
-            async with SisregClient(SISREG_BASE_URL, username, password, "VIDEOFONISTA") as client:
-                for code in codes:
-                    try:
-                        detail = await client.detail(code)
-                        cadweb = None
-                        cns = detail.patient_cns
-                        if cns:
-                            if cns in cadweb_cache:
-                                cadweb = cadweb_cache[cns]
-                            else:
-                                try:
-                                    cadweb = await client.cadweb_lookup(cns)
-                                except Exception:
-                                    logger.warning("Worker CadWeb failed for code %s (operator %s)", code, user_hash)
-                                cadweb_cache[cns] = cadweb
-                        result[code] = (detail, cadweb)
-                    except Exception:
-                        logger.warning("Worker enrichment failed for code %s (operator %s)", code, user_hash)
-        except SisregLoginError:
-            logger.warning("Worker enrichment login failed for operator %s, skipping %d codes", user_hash, len(codes))
-        except Exception:
-            logger.exception("Worker enrichment session error for operator %s", user_hash)
-
-    return result
-
-
-async def _enrich_appointments(
-    listings: list[AppointmentListing],
-    credentials: list[tuple[str, str]],
+async def _enrich_with_cadsus(
+    rows: list[ScheduleExportRow],
     progress: ExecutionProgress,
 ) -> list[EnrichedAppointment]:
-    """Enrich listings with detail + CadWeb data via parallel SisReg sessions."""
-    if not listings:
+    """Enrich export rows with CADSUS patient data (CPF, phone, email, mother/father names).
+
+    Uses the same CADSUS client as the agendamentos page enrichment.
+    """
+    if not rows:
         return []
 
     progress.stage = "enriching"
-    codes = [item.code for item in listings]
-    semaphore = asyncio.Semaphore(5)
 
-    # Round-robin distribute codes across credentials
-    batches: dict[int, list[str]] = {i: [] for i in range(len(credentials))}
-    for idx, code in enumerate(codes):
-        batches[idx % len(credentials)].append(code)
+    from regulahub.config import get_cadsus_settings
+    from regulahub.integrations.cadsus_client import CadsusClient
 
-    tasks = [
-        _fetch_details_for_batch(batch_codes, credentials[cred_idx][0], credentials[cred_idx][1], semaphore)
-        for cred_idx, batch_codes in batches.items()
-        if batch_codes
-    ]
+    settings = get_cadsus_settings()
+    cadsus_results: dict[str, dict] = {}
 
-    results = await asyncio.gather(*tasks)
-    enrichment: dict[str, tuple[AppointmentDetail, CadwebPatientData | None]] = {}
-    for result_dict in results:
-        enrichment.update(result_dict)
+    # Extract unique CNS
+    unique_cns = list({row.cns for row in rows if row.cns})
 
-    # Build enriched appointments
+    if unique_cns and settings.cadsus_enabled:
+        cadsus = CadsusClient(settings=settings)
+        semaphore = asyncio.Semaphore(40)
+
+        async def _lookup(cns: str) -> None:
+            async with semaphore:
+                patient = await cadsus.get_patient_by_cns(cns)
+                if patient and patient.cpf:
+                    cadsus_results[cns] = {
+                        "cpf": patient.cpf or "",
+                        "phone": patient.phone or "",
+                        "email": patient.email or "",
+                        "mother_name": patient.mother_name or "",
+                        "father_name": patient.father_name or "",
+                    }
+
+        logger.info("Worker CADSUS enrichment: %d unique CNS", len(unique_cns))
+        await asyncio.gather(*[_lookup(cns) for cns in unique_cns])
+        logger.info("Worker CADSUS: %d/%d enriched", len(cadsus_results), len(unique_cns))
+
+    # Build enriched appointments from export rows + CADSUS data
     enriched: list[EnrichedAppointment] = []
-    listing_map = {item.code: item for item in listings}
-
-    for code, listing in listing_map.items():
-        detail, cadweb = enrichment.get(code, (None, None))
-
-        phone = ""
-        phone_ddd = ""
-        if cadweb and cadweb.phone_ddd and cadweb.phone_number:
-            phone = cadweb.phone_number
-            phone_ddd = cadweb.phone_ddd
-        elif detail and detail.best_phone:
-            phone = detail.best_phone.number
-            phone_ddd = detail.best_phone.ddd
-
+    for row in rows:
+        cadsus = cadsus_results.get(row.cns, {})
         enriched.append(
             EnrichedAppointment(
-                code=listing.code,
-                patient_cns=detail.patient_cns if detail else "",
-                patient_name=detail.patient_name or listing.patient_name if detail else listing.patient_name,
-                patient_cpf=cadweb.cpf if cadweb else "",
-                patient_birth_date=detail.patient_birth_date if detail else "",
-                patient_mother_name=cadweb.mother_name if cadweb else "",
-                patient_phone=phone,
-                patient_phone_ddd=phone_ddd,
-                doctor_name=detail.doctor_name if detail else "",
-                appointment_date=detail.appointment_date if detail else listing.execution_date,
-                procedure=detail.procedure_name or listing.procedure if detail else listing.procedure,
-                department=detail.department or listing.dept_execute if detail else listing.dept_execute,
-                department_solicitation=detail.req_unit_name or listing.dept_solicitation
-                if detail
-                else listing.dept_solicitation,
-                confirmation_key=detail.confirmation_key if detail else "",
-                status=detail.sol_status or listing.status if detail else listing.status,
+                code=row.solicitacao,
+                patient_cns=row.cns,
+                patient_name=row.nome,
+                patient_cpf=cadsus.get("cpf", ""),
+                patient_birth_date=row.dt_nascimento,
+                patient_mother_name=cadsus.get("mother_name", row.nome_mae),
+                patient_phone=cadsus.get("phone", row.telefone),
+                patient_phone_ddd="",
+                doctor_name=row.nome_profissional_executante,
+                appointment_date=f"{row.data_agendamento} {row.hr_agendamento}".strip(),
+                procedure=row.descricao_procedimento,
+                department=row.unidade_fantasia,
+                department_solicitation=row.mun_solicitante,
+                confirmation_key="",
+                status=row.situacao,
             )
         )
 
-    progress.total_enriched = sum(1 for e in enriched if e.patient_cns)
-    logger.info("Worker enrichment: %d/%d appointments enriched", progress.total_enriched, len(enriched))
+    progress.total_enriched = len(cadsus_results)
     return enriched
 
 
@@ -355,18 +310,22 @@ async def execute_integration(
 ) -> None:
     """Main worker pipeline — runs as a background task with its own DB session.
 
-    Pipeline: resolve credentials → fetch appointments → enrich → push to integration.
+    Pipeline: resolve credentials → export schedules → filter teleconsulta → enrich CADSUS → push.
     """
     from regulahub.db.engine import get_session_factory
 
-    progress = ExecutionProgress(execution_id=execution_id, started_at=datetime.now(UTC))
+    progress = ExecutionProgress(
+        execution_id=execution_id,
+        date_from=date_from,
+        date_to=date_to,
+        started_at=datetime.now(UTC),
+    )
     _active_executions[execution_id] = progress
 
     session_factory = get_session_factory()
 
     try:
         async with session_factory() as db_session:
-            # Update status to running
             repo = IntegrationExecutionRepository(db_session)
             progress.status = "running"
             await repo.update_status(
@@ -385,8 +344,8 @@ async def execute_integration(
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 2: Fetch appointments (no DB needed — pure SisReg HTTP)
-        listings = await _fetch_appointments(credentials, date_from, date_to, progress)
+        # Step 2: Fetch teleconsulta appointments via schedule export
+        rows = await _fetch_appointments(credentials, date_from, date_to, progress)
 
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
@@ -396,8 +355,8 @@ async def execute_integration(
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 3: Enrich appointments (no DB needed — pure SisReg HTTP)
-        enriched = await _enrich_appointments(listings, credentials, progress)
+        # Step 3: Enrich with CADSUS
+        enriched = await _enrich_with_cadsus(rows, progress)
 
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
@@ -407,7 +366,7 @@ async def execute_integration(
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 4: Push to integration system (pure HTTP)
+        # Step 4: Push to integration system
         batch_result = await _push_to_integration(enriched, system, endpoints, api_key, progress)
 
         # Step 5: Complete
@@ -488,22 +447,16 @@ async def trigger_execution(
     db_session: AsyncSession,
     triggered_by: str = "manual",
 ) -> uuid.UUID:
-    """Trigger a new worker execution. Returns execution ID.
-
-    Creates the DB record and starts the background task.
-    """
-    # Resolve system to get its ID
+    """Trigger a new worker execution. Returns execution ID."""
     system_repo = RegulationSystemRepository(db_session)
     system = await system_repo.get_by_code(system_code)
     if not system:
         raise ValueError(f"Integration system '{system_code}' not found")
 
-    # Check for running executions
     exec_repo = IntegrationExecutionRepository(db_session)
     if await exec_repo.has_running_execution(system.id):
         raise RuntimeError(f"An execution is already running for system '{system_code}'")
 
-    # Create execution record
     execution_id = uuid.uuid4()
     await exec_repo.create({
         "id": execution_id,
@@ -515,14 +468,12 @@ async def trigger_execution(
     })
     await db_session.commit()
 
-    # Start background task (worker creates its own DB session)
     task = asyncio.create_task(
         execute_integration(execution_id, system_code, date_from, date_to),
         name=f"integration-worker-{execution_id}",
     )
     _background_tasks[execution_id] = task
 
-    # Clean up reference when done
     def _cleanup(t: asyncio.Task) -> None:
         _background_tasks.pop(execution_id, None)
         _active_executions.pop(execution_id, None)

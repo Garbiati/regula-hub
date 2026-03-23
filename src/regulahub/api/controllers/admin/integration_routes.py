@@ -124,8 +124,8 @@ async def get_execution_status(
         return ExecutionStatusResponse(
             id=execution_id,
             status=progress.status,
-            date_from=None,  # type: ignore[arg-type]
-            date_to=None,  # type: ignore[arg-type]
+            date_from=progress.date_from,
+            date_to=progress.date_to,
             total_fetched=progress.total_fetched,
             total_enriched=progress.total_enriched,
             total_pushed=progress.total_pushed,
