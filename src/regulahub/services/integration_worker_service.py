@@ -325,8 +325,9 @@ async def _enrich_appointments(
         first_name = name_parts[0]
         last_name = name_parts[1] if len(name_parts) > 1 else ""
 
-        # Birth date: prefer CADSUS, fallback to CSV (ensure dd/MM/yyyy format)
-        birth_date = cadsus.get("birth_date", "") or row.dt_nascimento or ""
+        # Birth date: prefer CADSUS, fallback to CSV — normalize to dd/MM/yyyy
+        raw_birth = cadsus.get("birth_date", "") or row.dt_nascimento or ""
+        birth_date = raw_birth.replace(".", "/").strip() if raw_birth else ""
 
         # Phone: prefer CADSUS, fallback to CSV, default to 00000000000
         # Clean to digits only, validate 10-15 digits, else fallback
