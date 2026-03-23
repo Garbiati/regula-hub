@@ -32,11 +32,18 @@ function systemChildren(code: string): { labelKey: string; path: string; icon: s
     { labelKey: `nav.${meta.childKey}_consulta`, path: `/${meta.route}/consulta`, icon: "Search" },
   ];
   if (code === "SISREG") {
-    children.push({
-      labelKey: "nav.sisreg_agendamentos",
-      path: `/${meta.route}/agendamentos`,
-      icon: "Calendar",
-    });
+    children.push(
+      {
+        labelKey: "nav.sisreg_agendamentos",
+        path: `/${meta.route}/agendamentos`,
+        icon: "Calendar",
+      },
+      {
+        labelKey: "nav.sisreg_integrations",
+        path: `/${meta.route}/integrations`,
+        icon: "Plug",
+      },
+    );
   }
   return children;
 }
@@ -113,11 +120,18 @@ export function buildSystemPages(systems: RegulationSystem[]): Record<string, Sy
       { labelKey: `nav.${childKey}_consulta`, path: `/${s.routeSegment}/consulta`, icon: "Search" },
     ];
     if (s.code === "SISREG") {
-      pageChildren.push({
-        labelKey: "nav.sisreg_agendamentos",
-        path: `/${s.routeSegment}/agendamentos`,
-        icon: "Calendar",
-      });
+      pageChildren.push(
+        {
+          labelKey: "nav.sisreg_agendamentos",
+          path: `/${s.routeSegment}/agendamentos`,
+          icon: "Calendar",
+        },
+        {
+          labelKey: "nav.sisreg_integrations",
+          path: `/${s.routeSegment}/integrations`,
+          icon: "Plug",
+        },
+      );
     }
     pages[s.code] = {
       labelKey: `nav.${navKey}`,

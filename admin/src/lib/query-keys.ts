@@ -17,12 +17,12 @@ export const queryKeys = {
       all: ["admin", "users"] as const,
       selections: (userId: string) => ["admin", "users", "selections", userId] as const,
     },
-  },
-  integration: {
-    systems: ["admin", "integration", "systems"] as const,
-    executions: (skip?: number, limit?: number) =>
-      ["admin", "integration", "executions", skip, limit] as const,
-    status: (id: string) => ["admin", "integration", "executions", id, "status"] as const,
+    integration: {
+      systems: ["admin", "integration", "systems"] as const,
+      executions: (skip?: number, limit?: number) =>
+        ["admin", "integration", "executions", skip, limit] as const,
+      status: (id: string) => ["admin", "integration", "executions", id, "status"] as const,
+    },
   },
   sisreg: {
     search: (filters: string) => ["admin", "sisreg", "search", filters] as const,
