@@ -4,20 +4,25 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Play, Loader2 } from "lucide-react";
 
+import { DatePicker } from "@/components/ui/date-picker";
 import { useIntegrationSystems } from "@/hooks/use-integration-systems";
 import { useTriggerIntegration } from "@/hooks/use-trigger-integration";
 
-function formatDate(d: Date): string {
-  return d.toISOString().split("T")[0] as string;
+function formatDateBR(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 function getDefaultDateRange(): { from: string; to: string } {
   const now = new Date();
-  const from = new Date(now);
-  from.setDate(from.getDate() + 1);
-  const to = new Date(now);
-  to.setDate(to.getDate() + 7);
-  return { from: formatDate(from), to: formatDate(to) };
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+  return { from: formatDateBR(from), to: formatDateBR(to) };
+}
+
+/** Convert dd/MM/yyyy to yyyy-MM-dd for the backend API. */
+function toISO(dateBR: string): string {
+  const [d, m, y] = dateBR.split("/");
+  return `${y}-${m}-${d}`;
 }
 
 export interface IntegrationTriggerFormProps {
@@ -42,7 +47,7 @@ export function IntegrationTriggerForm({ onExecutionStarted }: IntegrationTrigge
     if (!code) return;
 
     trigger.mutate(
-      { systemCode: code, dateFrom, dateTo },
+      { systemCode: code, dateFrom: toISO(dateFrom), dateTo: toISO(dateTo) },
       {
         onSuccess: (data) => {
           onExecutionStarted?.(data.id);
@@ -79,12 +84,7 @@ export function IntegrationTriggerForm({ onExecutionStarted }: IntegrationTrigge
           <label className="text-xs font-medium text-[var(--text-secondary)]">
             {t("integrations.date_from")}
           </label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-          />
+          <DatePicker value={dateFrom} onChange={setDateFrom} />
         </div>
 
         {/* Date to */}
@@ -92,12 +92,7 @@ export function IntegrationTriggerForm({ onExecutionStarted }: IntegrationTrigge
           <label className="text-xs font-medium text-[var(--text-secondary)]">
             {t("integrations.date_to")}
           </label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-          />
+          <DatePicker value={dateTo} onChange={setDateTo} />
         </div>
       </div>
 
