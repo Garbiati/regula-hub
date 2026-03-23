@@ -109,6 +109,55 @@ export function PipelineModal({ open, state, onRetryOperator, onRetryEnrichment,
           <PipelineDag state={state} onRetryOperator={onRetryOperator} enrichEnabled={enrichEnabled} cacheEnabled={cacheEnabled} />
         </div>
 
+        {/* ── Enrichment progress bar (visible during CADSUS enrichment) ── */}
+        {enrichEnabled && state.enrichStatus === "active" && state.enrichProgress.total > 0 && (
+          <div className="shrink-0 px-6 pb-3">
+            <div className="rounded-xl border border-[var(--accent-indigo)]/20 bg-[var(--accent-indigo-bg)]/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[var(--accent-indigo)] animate-pulse" />
+                  <span className="text-xs font-semibold text-[var(--accent-indigo)]">
+                    CADSUS
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-[var(--accent-indigo)] tabular-nums">
+                  {Math.round((state.enrichProgress.done / state.enrichProgress.total) * 100)}%
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-1.5 rounded-full bg-[var(--glass-border)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--accent-indigo)] transition-all duration-500 ease-out"
+                  style={{ width: `${Math.round((state.enrichProgress.done / state.enrichProgress.total) * 100)}%` }}
+                />
+              </div>
+
+              {/* Stats row */}
+              <div className="flex items-center gap-4 text-[11px] tabular-nums">
+                <span className="text-[var(--text-secondary)]">
+                  {state.enrichProgress.done}/{state.enrichProgress.total} {t("pipeline.enrich_processed")}
+                </span>
+                {state.enrichedCount > 0 && (
+                  <span className="text-[var(--status-success)] font-medium">
+                    {state.enrichedCount} {t("pipeline.enrich_found_label")}
+                  </span>
+                )}
+                {state.enrichFailedCount > 0 && (
+                  <span className="text-[var(--status-danger)] font-medium">
+                    {state.enrichFailedCount} {t("pipeline.enrich_failed_label")}
+                  </span>
+                )}
+                {state.enrichProgress.total - state.enrichProgress.done > 0 && (
+                  <span className="text-[var(--text-tertiary)] ml-auto">
+                    {state.enrichProgress.total - state.enrichProgress.done} {t("pipeline.enrich_remaining")}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Completion footer (overlay — does not push canvas) ── */}
         {state.isComplete && !state.isCancelled && (
           <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-2 z-20">
