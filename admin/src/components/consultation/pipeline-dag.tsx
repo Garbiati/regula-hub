@@ -241,6 +241,7 @@ export function PipelineDag({ state, onRetryOperator, enrichEnabled = false, cac
               node={node}
               status={state.enrichStatus}
               enrichedCount={state.enrichedCount}
+              enrichFailedCount={state.enrichFailedCount}
               progress={state.enrichProgress}
             />
           );

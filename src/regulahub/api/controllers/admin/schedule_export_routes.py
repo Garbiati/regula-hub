@@ -147,7 +147,7 @@ async def enrich_with_cadsus_endpoint(
     settings = get_cadsus_settings()
     if pending_cns and settings.cadsus_enabled:
         cadsus = CadsusClient(settings=settings)
-        semaphore = asyncio.Semaphore(5)
+        semaphore = asyncio.Semaphore(40)
 
         async def _cadsus_lookup(cns: str) -> bool:
             async with semaphore:

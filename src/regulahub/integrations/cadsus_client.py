@@ -71,10 +71,10 @@ class CadsusClient:
             self._ssl_ctx_built = True
         return self._ssl_ctx
 
-    async def get_patient_by_cns(self, cns: str, *, max_retries: int = 3) -> CadsusPatientData | None:
+    async def get_patient_by_cns(self, cns: str, *, max_retries: int = 5) -> CadsusPatientData | None:
         """Look up patient data by CNS in the CADSUS registry.
 
-        Retries up to max_retries times on 401/429 (rate limit) with exponential backoff.
+        Retries up to max_retries times on 401/429/503 with 1-second fixed interval.
         Returns None if patient not found or on persistent failure.
         """
         if not self._settings.cadsus_enabled:
@@ -99,12 +99,14 @@ class CadsusClient:
 
                 if resp.status_code in (401, 429, 503):
                     if attempt < max_retries - 1:
-                        delay = (attempt + 1) * 2  # 2s, 4s, 6s
                         logger.info(
-                            "CADSUS rate limited (status %d), retry %d/%d in %ds",
-                            resp.status_code, attempt + 1, max_retries, delay,
+                            "CADSUS rate limited (status %d), retry %d/%d in 1s",
+                            resp.status_code, attempt + 1, max_retries,
                         )
-                        await asyncio.sleep(delay)
+                        await asyncio.sleep(1)
+                        if resp.status_code == 401:
+                            self._token = None
+                            self._token_expires_at = 0
                         continue
                     logger.warning("CADSUS failed after %d retries for CNS (status %d)", max_retries, resp.status_code)
                     return None
@@ -117,7 +119,7 @@ class CadsusClient:
 
             except Exception:
                 if attempt < max_retries - 1:
-                    await asyncio.sleep((attempt + 1) * 2)
+                    await asyncio.sleep(1)
                     continue
                 logger.exception("CADSUS lookup failed for patient after %d retries", max_retries)
                 return None

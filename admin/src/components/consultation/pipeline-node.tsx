@@ -261,14 +261,16 @@ interface DagEnrichNodeProps {
   node: LayoutNode;
   status: "idle" | "active" | "success" | "partial" | "skipped";
   enrichedCount: number;
+  enrichFailedCount: number;
   progress: { done: number; total: number };
 }
 
-export function DagEnrichNode({ node, status, enrichedCount, progress }: DagEnrichNodeProps) {
+export function DagEnrichNode({ node, status, enrichedCount, enrichFailedCount, progress }: DagEnrichNodeProps) {
   const t = useTranslations();
   const size = nodeSize(node.h);
   const enrichIconCls = size === "lg" ? "h-5 w-5" : size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const remaining = Math.max(0, progress.total - progress.done);
 
   return (
     <NodeBase
@@ -305,9 +307,22 @@ export function DagEnrichNode({ node, status, enrichedCount, progress }: DagEnri
         {t("pipeline.step_enrich")}
       </span>
       {status === "active" ? (
-        <span className={cn("font-bold text-[var(--accent-indigo)] tabular-nums", countTextCls[size])}>
-          {progress.done}/{progress.total}
-        </span>
+        <div className="flex flex-col items-center gap-0.5">
+          <span className={cn("font-bold text-[var(--accent-indigo)] tabular-nums", countTextCls[size])}>
+            {progress.done}/{progress.total}
+          </span>
+          <div className={cn("flex items-center gap-1.5 tabular-nums", smallTextCls[size])}>
+            {enrichedCount > 0 && (
+              <span className="text-[var(--status-success)]">{enrichedCount} ok</span>
+            )}
+            {enrichFailedCount > 0 && (
+              <span className="text-[var(--status-danger)]">{enrichFailedCount} err</span>
+            )}
+            {remaining > 0 && (
+              <span className="text-[var(--text-tertiary)]">{remaining} left</span>
+            )}
+          </div>
+        </div>
       ) : (status === "success" || status === "partial") ? (
         <span className={cn(
           "font-bold animate-count-up",

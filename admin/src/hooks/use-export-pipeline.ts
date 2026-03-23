@@ -123,7 +123,10 @@ function reducer(state: PipelineState, action: Action): PipelineState {
     case "ENRICH_BATCH":
       return {
         ...state,
-        enrichProgress: { ...state.enrichProgress, done: action.done },
+        enrichProgress: {
+          ...state.enrichProgress,
+          done: Math.max(state.enrichProgress.done, action.done),
+        },
         enrichedCount: state.enrichedCount + action.found,
         enrichFailedCount: state.enrichFailedCount + action.failed,
       };
@@ -291,7 +294,7 @@ export function useExportPipeline(): UseExportPipelineReturn {
       ? { ...enrichResultsAccRef.current }
       : Object.fromEntries(alreadyEnrichedByCns);
     const filters = filtersRef.current;
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 100;
 
     // Clear failed tracking for this run's target CNS
     for (const cns of cnsList) {
@@ -326,7 +329,9 @@ export function useExportPipeline(): UseExportPipelineReturn {
             failedCnsRef.current.add(cns);
           }
         }
-        const done = preEnrichedCount + Math.min(i + BATCH_SIZE, cnsList.length);
+        // Progress = pre-enriched + all CNS processed so far (index-based, monotonically increasing)
+        const processedSoFar = Math.min(i + BATCH_SIZE, cnsList.length);
+        const done = preEnrichedCount + processedSoFar;
         dispatch({ type: "ENRICH_BATCH", done, found: response.found, failed: response.failed });
       }
 
