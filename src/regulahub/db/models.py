@@ -225,6 +225,39 @@ class CachedEnrichment(Base):
     updated_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
 
 
+class IntegrationExecution(Base):
+    """Worker execution history — tracks integration push runs."""
+
+    __tablename__ = "integration_executions"
+    __table_args__ = (
+        Index("idx_integ_exec_system", "integration_system_id"),
+        Index("idx_integ_exec_status", "status"),
+        Index("idx_integ_exec_created", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    integration_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("systems.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    date_from: Mapped[date] = mapped_column(Date, nullable=False)
+    date_to: Mapped[date] = mapped_column(Date, nullable=False)
+    total_fetched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_enriched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_pushed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_failed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    progress_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    triggered_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+
+
 class Credential(Base):
     """Encrypted credential for external system access — per-user, per-profile."""
 
