@@ -258,6 +258,74 @@ class IntegrationExecution(Base):
     updated_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
 
 
+class IntegrationDepartment(Base):
+    """Health unit department with CNES code — mapped to an integration system."""
+
+    __tablename__ = "integration_departments"
+    __table_args__ = (
+        Index("idx_integ_dept_system", "integration_system_id"),
+        Index("idx_integ_dept_cnes", "cnes_code"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    integration_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("systems.id", ondelete="RESTRICT"), nullable=False
+    )
+    department_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cnes_code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
+    group_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    department_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    is_remote: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
+
+
+class IntegrationProcedure(Base):
+    """Teleconsultation procedure mapped to a specialty and work scale."""
+
+    __tablename__ = "integration_procedures"
+    __table_args__ = (Index("idx_integ_proc_system", "integration_system_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    integration_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("systems.id", ondelete="RESTRICT"), nullable=False
+    )
+    procedure_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    specialty_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    specialty_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    work_scale_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    work_scale_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
+
+
+class IntegrationExecutionMapping(Base):
+    """Requester-to-executor CNES mapping for integration appointment routing."""
+
+    __tablename__ = "integration_execution_mappings"
+    __table_args__ = (
+        Index("idx_integ_execmap_system", "integration_system_id"),
+        Index("idx_integ_execmap_cnes", "requester_cnes", "executor_cnes"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    integration_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("systems.id", ondelete="RESTRICT"), nullable=False
+    )
+    municipality: Mapped[str] = mapped_column(String(100), nullable=False)
+    requester_cnes: Mapped[str] = mapped_column(String(10), nullable=False)
+    requester_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    executor_cnes: Mapped[str] = mapped_column(String(10), nullable=False)
+    executor_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    executor_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    group_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
+
+
 class Credential(Base):
     """Encrypted credential for external system access — per-user, per-profile."""
 
