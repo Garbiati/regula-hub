@@ -142,7 +142,11 @@ async def _fetch_appointments(
     date_to: date,
     progress: ExecutionProgress,
 ) -> list[AppointmentListing]:
-    """Fetch appointments from SisReg for a date range using all credentials in parallel."""
+    """Fetch appointments from SisReg for a date range.
+
+    Searches sequentially per day using a single SisReg session to avoid
+    concurrent login conflicts (SisReg invalidates previous sessions).
+    """
     progress.stage = "fetching"
 
     # Generate all dates in range
@@ -152,10 +156,12 @@ async def _fetch_appointments(
         dates.append(current)
         current += timedelta(days=1)
 
-    # Search each day with the first credential (VIDEOFONISTA sees all municipalities)
+    # Search each day sequentially with the first credential
     username, password = credentials[0]
-    tasks = [_search_single_day(username, password, d.strftime("%d/%m/%Y")) for d in dates]
-    results = await asyncio.gather(*tasks)
+    results: list[list[AppointmentListing]] = []
+    for d in dates:
+        items = await _search_single_day(username, password, d.strftime("%d/%m/%Y"))
+        results.append(items)
 
     # Merge and deduplicate by code
     seen_codes: set[str] = set()
@@ -346,69 +352,83 @@ async def execute_integration(
     system_code: str,
     date_from: date,
     date_to: date,
-    db_session: AsyncSession,
 ) -> None:
-    """Main worker pipeline — runs as a background task.
+    """Main worker pipeline — runs as a background task with its own DB session.
 
     Pipeline: resolve credentials → fetch appointments → enrich → push to integration.
     """
+    from regulahub.db.engine import get_session_factory
+
     progress = ExecutionProgress(execution_id=execution_id, started_at=datetime.now(UTC))
     _active_executions[execution_id] = progress
-    repo = IntegrationExecutionRepository(db_session)
+
+    session_factory = get_session_factory()
 
     try:
-        # Update status to running
-        progress.status = "running"
-        await repo.update_status(
-            execution_id,
-            "running",
-            started_at=progress.started_at,
-            progress_data=progress.to_dict(),
-        )
-        await db_session.commit()
+        async with session_factory() as db_session:
+            # Update status to running
+            repo = IntegrationExecutionRepository(db_session)
+            progress.status = "running"
+            await repo.update_status(
+                execution_id,
+                "running",
+                started_at=progress.started_at,
+                progress_data=progress.to_dict(),
+            )
+            await db_session.commit()
 
-        # Step 1: Resolve credentials and integration system
-        credentials = await _resolve_credentials(db_session)
-        system, endpoints = await _resolve_integration_system(db_session, system_code)
-        api_key = await _resolve_integration_api_key(db_session, system_code)
+            # Step 1: Resolve credentials and integration system
+            credentials = await _resolve_credentials(db_session)
+            system, endpoints = await _resolve_integration_system(db_session, system_code)
+            api_key = await _resolve_integration_api_key(db_session, system_code)
 
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 2: Fetch appointments
+        # Step 2: Fetch appointments (no DB needed — pure SisReg HTTP)
         listings = await _fetch_appointments(credentials, date_from, date_to, progress)
-        await repo.update_progress(execution_id, progress.to_dict())
-        await db_session.commit()
+
+        async with session_factory() as db_session:
+            repo = IntegrationExecutionRepository(db_session)
+            await repo.update_progress(execution_id, progress.to_dict())
+            await db_session.commit()
 
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 3: Enrich appointments
+        # Step 3: Enrich appointments (no DB needed — pure SisReg HTTP)
         enriched = await _enrich_appointments(listings, credentials, progress)
-        await repo.update_progress(execution_id, progress.to_dict())
-        await db_session.commit()
+
+        async with session_factory() as db_session:
+            repo = IntegrationExecutionRepository(db_session)
+            await repo.update_progress(execution_id, progress.to_dict())
+            await db_session.commit()
 
         if progress.cancelled:
             raise asyncio.CancelledError
 
-        # Step 4: Push to integration system
+        # Step 4: Push to integration system (pure HTTP)
         batch_result = await _push_to_integration(enriched, system, endpoints, api_key, progress)
 
         # Step 5: Complete
         progress.status = "completed"
         progress.stage = "complete"
         progress.completed_at = datetime.now(UTC)
-        await repo.update_status(
-            execution_id,
-            "completed",
-            total_fetched=progress.total_fetched,
-            total_enriched=progress.total_enriched,
-            total_pushed=batch_result.pushed,
-            total_failed=batch_result.failed,
-            progress_data=progress.to_dict(),
-            completed_at=progress.completed_at,
-        )
-        await db_session.commit()
+
+        async with session_factory() as db_session:
+            repo = IntegrationExecutionRepository(db_session)
+            await repo.update_status(
+                execution_id,
+                "completed",
+                total_fetched=progress.total_fetched,
+                total_enriched=progress.total_enriched,
+                total_pushed=batch_result.pushed,
+                total_failed=batch_result.failed,
+                progress_data=progress.to_dict(),
+                completed_at=progress.completed_at,
+            )
+            await db_session.commit()
+
         logger.info(
             "Worker execution %s completed: fetched=%d, enriched=%d, pushed=%d, failed=%d",
             execution_id,
@@ -421,41 +441,40 @@ async def execute_integration(
     except asyncio.CancelledError:
         progress.status = "cancelled"
         progress.completed_at = datetime.now(UTC)
-        await repo.update_status(
-            execution_id,
-            "cancelled",
-            total_fetched=progress.total_fetched,
-            total_enriched=progress.total_enriched,
-            total_pushed=progress.total_pushed,
-            total_failed=progress.total_failed,
-            progress_data=progress.to_dict(),
-            completed_at=progress.completed_at,
-        )
-        await db_session.commit()
+        async with session_factory() as db_session:
+            repo = IntegrationExecutionRepository(db_session)
+            await repo.update_status(
+                execution_id,
+                "cancelled",
+                total_fetched=progress.total_fetched,
+                total_enriched=progress.total_enriched,
+                total_pushed=progress.total_pushed,
+                total_failed=progress.total_failed,
+                progress_data=progress.to_dict(),
+                completed_at=progress.completed_at,
+            )
+            await db_session.commit()
         logger.info("Worker execution %s cancelled", execution_id)
 
     except Exception as exc:
         progress.status = "failed"
         progress.error_message = str(exc)
         progress.completed_at = datetime.now(UTC)
-        await repo.update_status(
-            execution_id,
-            "failed",
-            error_message=str(exc),
-            total_fetched=progress.total_fetched,
-            total_enriched=progress.total_enriched,
-            total_pushed=progress.total_pushed,
-            total_failed=progress.total_failed,
-            progress_data=progress.to_dict(),
-            completed_at=progress.completed_at,
-        )
-        await db_session.commit()
+        async with session_factory() as db_session:
+            repo = IntegrationExecutionRepository(db_session)
+            await repo.update_status(
+                execution_id,
+                "failed",
+                error_message=str(exc),
+                total_fetched=progress.total_fetched,
+                total_enriched=progress.total_enriched,
+                total_pushed=progress.total_pushed,
+                total_failed=progress.total_failed,
+                progress_data=progress.to_dict(),
+                completed_at=progress.completed_at,
+            )
+            await db_session.commit()
         logger.exception("Worker execution %s failed", execution_id)
-
-    finally:
-        # Keep in-memory for a while for status polling, then clean up
-        # (cleanup happens naturally when the dict entry is no longer polled)
-        pass
 
 
 # Store for background tasks so they don't get garbage collected
@@ -496,9 +515,9 @@ async def trigger_execution(
     })
     await db_session.commit()
 
-    # Start background task
+    # Start background task (worker creates its own DB session)
     task = asyncio.create_task(
-        execute_integration(execution_id, system_code, date_from, date_to, db_session),
+        execute_integration(execution_id, system_code, date_from, date_to),
         name=f"integration-worker-{execution_id}",
     )
     _background_tasks[execution_id] = task
