@@ -12,6 +12,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from regulahub.api.controllers.admin.credential_routes import router as credential_router
+from regulahub.api.controllers.admin.integration_routes import router as integration_router
 from regulahub.api.controllers.admin.regulation_system_routes import router as regulation_system_router
 from regulahub.api.controllers.admin.routes import router as admin_router
 from regulahub.api.controllers.admin.schedule_export_routes import router as schedule_export_router
@@ -95,6 +96,7 @@ app.include_router(regulation_system_router)
 app.include_router(sisreg_router)
 app.include_router(schedule_export_router)
 app.include_router(user_router)
+app.include_router(integration_router)
 app.include_router(compat_absens_router)
 
 
