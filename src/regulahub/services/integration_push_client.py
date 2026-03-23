@@ -239,6 +239,20 @@ class IntegrationPushClient:
                     result = resp2.json()
                     return str(result.get("id", "")) if isinstance(result, dict) else str(result)
 
+            # 500 with "Invalid sender name" for PRESENCIAL → retry as ONLINE
+            is_sender_error = resp.status_code == 500 and "Invalid sender name" in resp.text
+            if is_sender_error and data.get("preference_of_service") == "PRESENCIAL":
+                logger.info("Appointment 500 Invalid sender name, retrying as ONLINE")
+                data_online = {**data, "preference_of_service": "ONLINE"}
+                resp3 = await self._client.post(
+                    f"{self._core_base}/integration/appointment",
+                    json=data_online,
+                    headers=headers,
+                )
+                if resp3.status_code in (200, 201):
+                    result = resp3.json()
+                    return str(result.get("id", "")) if isinstance(result, dict) else str(result)
+
             logger.warning("create_appointment failed: %s %s", resp.status_code, resp.text[:500])
             return None
         except Exception as exc:
