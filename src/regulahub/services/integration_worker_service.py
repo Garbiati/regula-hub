@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from regulahub.db.repositories.credential import CredentialRepository
 from regulahub.db.repositories.integration_execution import IntegrationExecutionRepository
 from regulahub.db.repositories.regulation_system import RegulationSystemRepository
-from regulahub.services.integration_push_client import BatchPushResult, IntegrationPushClient
+from regulahub.services.integration_push_client import BatchPushResult, IntegrationPushClient, PushResult
 from regulahub.sisreg.client import SisregClient, SisregLoginError
 from regulahub.sisreg.export_parser import parse_export_csv
 from regulahub.sisreg.models import ScheduleExportRow
@@ -370,11 +370,118 @@ async def _enrich_appointments(
             "location_of_service": location,
             "start_date": start_date_str,
             "end_date": end_date_str,
+            # Extra fields for appointment persistence
+            "procedure_name": row.descricao_procedimento,
+            "department_executor": executor_dept.department_name if executor_dept else executor_name,
+            "department_executor_cnes": executor_dept.cnes_code if executor_dept else "",
+            "department_solicitor": row.unidade_fantasia,
+            "department_solicitor_cnes": row.cnes_solicitante,
         })
 
     progress.total_enriched = len(cadsus_results)
     logger.info("Worker enrichment complete: %d appointments ready for push", len(enriched))
     return enriched
+
+
+async def _persist_appointments(
+    enriched: list[dict],
+    execution_id: uuid.UUID,
+    system_id: uuid.UUID,
+    reference_date: date,
+) -> None:
+    """Batch insert enriched appointments as 'pending' before push."""
+    from regulahub.db.engine import get_session_factory
+    from regulahub.db.repositories.integration_appointment import IntegrationAppointmentRepository
+
+    session_factory = get_session_factory()
+    async with session_factory() as db_session:
+        repo = IntegrationAppointmentRepository(db_session)
+        items = []
+        for appt in enriched:
+            name_parts = [appt.get("patient_first_name", ""), appt.get("patient_last_name", "")]
+            patient_name = " ".join(p for p in name_parts if p).strip()
+
+            # Parse appointment_date from start_date ISO string
+            appt_date = reference_date
+            appt_time = None
+            start_str = appt.get("start_date", "")
+            if start_str:
+                try:
+                    from datetime import datetime as dt_cls
+                    from datetime import time as time_cls
+
+                    parsed = dt_cls.fromisoformat(start_str)
+                    appt_date = parsed.date()
+                    appt_time = time_cls(parsed.hour, parsed.minute)
+                except (ValueError, AttributeError):
+                    pass
+
+            items.append({
+                "integration_system_id": system_id,
+                "execution_id": execution_id,
+                "regulation_code": appt.get("code", ""),
+                "confirmation_key": appt.get("confirmation_key", ""),
+                "external_id": appt.get("external_id", ""),
+                "patient_name": patient_name or "DESCONHECIDO",
+                "patient_cpf": appt.get("patient_cpf", ""),
+                "patient_cns": appt.get("patient_cns", ""),
+                "patient_birth_date": appt.get("patient_birth_date", ""),
+                "patient_phone": appt.get("patient_phone", ""),
+                "patient_mother_name": appt.get("patient_mother_name", ""),
+                "appointment_date": appt_date,
+                "appointment_time": appt_time,
+                "procedure_name": appt.get("procedure_name", "TELECONSULTA"),
+                "department_executor": appt.get("department_executor", ""),
+                "department_executor_cnes": appt.get("department_executor_cnes", ""),
+                "department_solicitor": appt.get("department_solicitor", ""),
+                "department_solicitor_cnes": appt.get("department_solicitor_cnes", ""),
+                "doctor_name": appt.get("doctor_name", ""),
+                "status": "pending",
+                "integration_data": {
+                    "group_id": appt.get("group_id", ""),
+                    "work_scale_name": appt.get("work_scale_name", ""),
+                    "preference_of_service": appt.get("preference_of_service", ""),
+                    "location_of_service": appt.get("location_of_service", ""),
+                },
+                "source_data": {
+                    "sisreg_export": {
+                        "solicitacao": appt.get("code", ""),
+                        "descricao_procedimento": appt.get("procedure_name", ""),
+                    },
+                },
+                "reference_date": reference_date,
+            })
+
+        if items:
+            await repo.bulk_create(items)
+            await db_session.commit()
+            logger.info("Persisted %d appointments as pending", len(items))
+
+
+async def _update_appointment_status(
+    regulation_code: str,
+    status: str,
+    push_result: PushResult,
+    integration_data_update: dict | None = None,
+) -> None:
+    """Update a single appointment after push result."""
+    from regulahub.db.engine import get_session_factory
+    from regulahub.db.repositories.integration_appointment import IntegrationAppointmentRepository
+
+    session_factory = get_session_factory()
+    async with session_factory() as db_session:
+        repo = IntegrationAppointmentRepository(db_session)
+        appt = await repo.get_by_regulation_code(regulation_code)
+        if not appt:
+            return
+        await repo.update_status(
+            appt.id,
+            status=status,
+            error_message=push_result.error,
+            error_category=push_result.error_category or None,
+            integration_data=integration_data_update,
+        )
+        await db_session.commit()
 
 
 async def _push_to_integration(
@@ -399,13 +506,24 @@ async def _push_to_integration(
                 break
             result = await client.process_appointment(appointment)
             batch_result.results.append(result)
+
+            # Update appointment record with result
             if result.success:
                 batch_result.pushed += 1
                 progress.total_pushed = batch_result.pushed
+                status = "skipped" if result.appointment_skipped else "integrated"
+                int_data = {
+                    "patient_id": result.patient_id,
+                    "appointment_id": result.appointment_id,
+                    "is_new_account": result.is_new_account,
+                }
+                await _update_appointment_status(result.code, status, result, int_data)
             else:
                 batch_result.failed += 1
                 progress.total_failed = batch_result.failed
-                logger.warning("Push failed for %s: %s", appointment.get("code"), result.error)
+                status = f"{result.error_category}_error" if result.error_category else "appointment_error"
+                await _update_appointment_status(result.code, status, result)
+                logger.warning("Push failed for %s: %s", result.code, result.error)
 
     return batch_result
 
@@ -446,6 +564,13 @@ async def execute_integration(
 
             credentials = await _resolve_credentials(db_session)
             videofonista_creds = await _resolve_credentials(db_session, "VIDEOFONISTA")
+
+            # Resolve system ID for appointment persistence
+            from regulahub.db.repositories.regulation_system import RegulationSystemRepository
+
+            sys_repo = RegulationSystemRepository(db_session)
+            system = await sys_repo.get_by_code(system_code)
+            system_id = system.id if system else None
 
             # Load all mappings into memory for fast lookup
             mapping_repo = IntegrationMappingRepository(db_session)
@@ -496,6 +621,10 @@ async def execute_integration(
 
         if progress.cancelled:
             raise asyncio.CancelledError
+
+        # ── Step 2.5: Persist appointments as 'pending' before push ──
+        if enriched and system_id:
+            await _persist_appointments(enriched, execution_id, system_id, date_from)
 
         # ── Step 3: Push to integration system ──
         batch_result = await _push_to_integration(enriched, api_key, progress)
