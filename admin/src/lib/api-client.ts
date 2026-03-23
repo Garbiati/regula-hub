@@ -40,7 +40,12 @@ class ApiClient {
       let detail: string | undefined;
       try {
         const body = await response.json();
-        detail = body.detail ?? body.message;
+        const rawDetail = body.detail ?? body.message;
+        if (typeof rawDetail === "string") {
+          detail = rawDetail;
+        } else if (Array.isArray(rawDetail)) {
+          detail = rawDetail.map((e: { msg?: string }) => e.msg ?? JSON.stringify(e)).join("; ");
+        }
       } catch {
         // ignore parse errors
       }

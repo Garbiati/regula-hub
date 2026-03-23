@@ -3,15 +3,19 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ── Request schemas ──────────────────────────────────────────────────────
 
 
 class TriggerExecutionRequest(BaseModel):
-    system_code: str = Field(..., min_length=1, max_length=30, description="Integration system code")
-    date_from: date = Field(..., description="Start date (YYYY-MM-DD)")
-    date_to: date = Field(..., description="End date (YYYY-MM-DD)")
+    model_config = ConfigDict(populate_by_name=True)
+
+    system_code: str = Field(
+        ..., validation_alias="systemCode", min_length=1, max_length=30, description="Integration system code"
+    )
+    date_from: date = Field(..., validation_alias="dateFrom", description="Start date (YYYY-MM-DD)")
+    date_to: date = Field(..., validation_alias="dateTo", description="End date (YYYY-MM-DD)")
 
 
 # ── Response schemas ─────────────────────────────────────────────────────
