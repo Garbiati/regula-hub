@@ -175,6 +175,7 @@ async def _fetch_appointments(
 async def _enrich_appointments(
     rows: list[ScheduleExportRow],
     credentials: list[tuple[str, str]],
+    videofonista_credentials: list[tuple[str, str]],
     departments: dict[str, object],
     procedures: dict[str, object],
     execution_mappings: dict[str, object],
@@ -220,11 +221,11 @@ async def _enrich_appointments(
     detail_results: dict[str, str] = {}  # solicitacao → confirmationKey
     codes = [row.solicitacao for row in rows if row.solicitacao]
 
-    if codes and credentials:
-        username, password = credentials[0]
+    if codes and videofonista_credentials:
+        username, password = videofonista_credentials[0]
         user_hash = mask_username(username)
         try:
-            async with SisregClient(SISREG_BASE_URL, username, password, "EXECUTANTE/SOLICITANTE") as client:
+            async with SisregClient(SISREG_BASE_URL, username, password, "VIDEOFONISTA") as client:
                 for code in codes:
                     try:
                         detail = await client.detail(code)
@@ -426,6 +427,7 @@ async def execute_integration(
             await db_session.commit()
 
             credentials = await _resolve_credentials(db_session)
+            videofonista_creds = await _resolve_credentials(db_session, "VIDEOFONISTA")
 
             # Load all mappings into memory for fast lookup
             mapping_repo = IntegrationMappingRepository(db_session)
@@ -465,7 +467,9 @@ async def execute_integration(
             raise asyncio.CancelledError
 
         # ── Step 2: Enrich (CADSUS + detail + mappings) ──
-        enriched = await _enrich_appointments(rows, credentials, departments, procedures, execution_mappings, progress)
+        enriched = await _enrich_appointments(
+            rows, credentials, videofonista_creds, departments, procedures, execution_mappings, progress,
+        )
 
         async with session_factory() as db_session:
             repo = IntegrationExecutionRepository(db_session)
