@@ -249,34 +249,45 @@ async def _enrich_appointments(
         cadsus = cadsus_results.get(row.cns, {})
         confirmation_key = detail_results.get(row.solicitacao, "")
 
-        # Resolve department by name (unidade_fantasia from CSV)
-        dept = departments.get(row.unidade_fantasia.upper().strip())
         # Resolve procedure by name
         proc = procedures.get(row.descricao_procedimento.upper().strip())
-
-        if not dept:
-            logger.warning("Department not mapped: %s (code %s)", row.unidade_fantasia, row.solicitacao)
-            continue
         if not proc:
             logger.warning("Procedure not mapped: %s (code %s)", row.descricao_procedimento, row.solicitacao)
             continue
 
-        # For PARTIALINTEGRATION departments, resolve group_id from execution mapping
-        group_id = str(dept.group_id)
+        # Resolve department by name (unidade_fantasia from CSV)
+        dept = departments.get(row.unidade_fantasia.upper().strip())
+
+        # Resolve group_id and location
+        group_id = ""
         location = ""
-        if dept.department_type == "PARTIALINTEGRATION" and row.cnes_solicitante:
-            mapping = execution_mappings.get(row.cnes_solicitante)
+        is_remote = True  # Default to ONLINE for unmapped departments
+
+        if dept:
+            group_id = str(dept.group_id)
+            is_remote = dept.is_remote
+            location = row.unidade_fantasia
+
+            # For PARTIALINTEGRATION, resolve via execution_mapping by requester CNES
+            if dept.department_type == "PARTIALINTEGRATION" and row.cnes_solicitante:
+                mapping = execution_mappings.get(row.cnes_solicitante)
+                if mapping:
+                    group_id = str(mapping.group_id)
+                    location = mapping.executor_address or row.unidade_fantasia
+                    is_remote = True  # PARTIALINTEGRATION = remote
+        else:
+            # Department not in our mapping — try execution_mapping by requester CNES
+            mapping = execution_mappings.get(row.cnes_solicitante) if row.cnes_solicitante else None
             if mapping:
                 group_id = str(mapping.group_id)
-                location = mapping.executor_address or ""
+                location = mapping.executor_address or row.unidade_fantasia
             else:
-                logger.warning(
-                    "Execution mapping not found for CNES %s (code %s)", row.cnes_solicitante, row.solicitacao,
-                )
+                logger.warning("Department not mapped: %s (code %s)", row.unidade_fantasia, row.solicitacao)
                 continue
 
-        if not location:
-            location = row.unidade_fantasia
+        if not group_id:
+            logger.warning("No group_id for code %s", row.solicitacao)
+            continue
 
         # Parse appointment date/time → ISO 8601 Manaus timezone
         start_date_str = ""
@@ -307,7 +318,7 @@ async def _enrich_appointments(
         phone = cadsus.get("phone", "") or row.telefone or "00000000000"
 
         # Preference of service
-        preference = "ONLINE" if dept.is_remote else "PRESENCIAL"
+        preference = "ONLINE" if is_remote else "PRESENCIAL"
 
         enriched.append({
             "code": row.solicitacao,

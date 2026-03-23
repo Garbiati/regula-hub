@@ -143,7 +143,7 @@ class IntegrationPushClient:
             if resp.status_code in (200, 201):
                 result = resp.json()
                 return str(result) if isinstance(result, str) else str(result.get("id", result.get("patientId", "")))
-            logger.warning("register_patient failed: %s %s", resp.status_code, resp.text[:200])
+            logger.warning("register_patient failed: %s %s", resp.status_code, resp.text[:500])
             return None
         except Exception:
             logger.warning("register_patient request failed")
@@ -239,7 +239,7 @@ class IntegrationPushClient:
                     result = resp2.json()
                     return str(result.get("id", "")) if isinstance(result, dict) else str(result)
 
-            logger.warning("create_appointment failed: %s %s", resp.status_code, resp.text[:300])
+            logger.warning("create_appointment failed: %s %s", resp.status_code, resp.text[:500])
             return None
         except Exception as exc:
             logger.warning("create_appointment request failed: %s", exc)
