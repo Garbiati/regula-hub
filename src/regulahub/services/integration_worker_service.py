@@ -282,8 +282,16 @@ async def _enrich_appointments(
                 group_id = str(mapping.group_id)
                 location = mapping.executor_address or row.unidade_fantasia
             else:
-                logger.warning("Department not mapped: %s (code %s)", row.unidade_fantasia, row.solicitacao)
-                continue
+                # Fallback: use AMBULATORIO VIRTUAL DO AMAZONAS (ONLINE teleconsultation)
+                # TODO: refactor — This fallback is Saude AM Digital specific
+                fallback_dept = departments.get("AMBULATORIO VIRTUAL DO AMAZONAS")
+                if fallback_dept:
+                    group_id = str(fallback_dept.group_id)
+                    location = row.unidade_fantasia
+                    is_remote = True
+                else:
+                    logger.warning("Department not mapped: %s (code %s)", row.unidade_fantasia, row.solicitacao)
+                    continue
 
         if not group_id:
             logger.warning("No group_id for code %s", row.solicitacao)
@@ -315,7 +323,12 @@ async def _enrich_appointments(
         birth_date = cadsus.get("birth_date", "") or row.dt_nascimento or ""
 
         # Phone: prefer CADSUS, fallback to CSV, default to 00000000000
-        phone = cadsus.get("phone", "") or row.telefone or "00000000000"
+        # Clean to digits only, validate 10-15 digits, else fallback
+        import re as _re
+
+        raw_phone = cadsus.get("phone", "") or row.telefone or ""
+        phone_digits = _re.sub(r"\D", "", raw_phone)
+        phone = phone_digits if 10 <= len(phone_digits) <= 15 else "00000000000"
 
         # Preference of service
         preference = "ONLINE" if is_remote else "PRESENCIAL"
