@@ -301,7 +301,11 @@ async def export_single_operator_endpoint(
     user_hash = mask_username(resolved_username)
     try:
         rows = await export_single_operator_resolved(
-            resolved_username, password, body.profile_type, body.date_from, body.date_to,
+            resolved_username,
+            password,
+            body.profile_type,
+            body.date_from,
+            body.date_to,
         )
         filtered = _filter_by_procedure(rows, body.procedure_filter)
         items = [_map_row_to_response(row) for row in filtered]
@@ -444,15 +448,17 @@ async def query_cached_exports(
     for row in rows:
         base = _map_row_to_response(row)
         if isinstance(row, EnrichedExportRow):
-            items.append(EnrichedExportItemResponse(
-                **base.model_dump(),
-                cpf_paciente=row.cpf_paciente,
-                email_paciente=row.email_paciente,
-                telefone_cadsus=row.telefone_cadsus,
-                nome_pai=row.nome_pai,
-                raca=row.raca,
-                cns_definitivo=row.cns_definitivo,
-            ))
+            items.append(
+                EnrichedExportItemResponse(
+                    **base.model_dump(),
+                    cpf_paciente=row.cpf_paciente,
+                    email_paciente=row.email_paciente,
+                    telefone_cadsus=row.telefone_cadsus,
+                    nome_pai=row.nome_pai,
+                    raca=row.raca,
+                    cns_definitivo=row.cns_definitivo,
+                )
+            )
         else:
             items.append(EnrichedExportItemResponse(**base.model_dump()))
     logger.info("Cached export query: %d rows returned", len(items))

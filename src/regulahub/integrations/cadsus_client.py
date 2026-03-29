@@ -101,7 +101,9 @@ class CadsusClient:
                     if attempt < max_retries - 1:
                         logger.info(
                             "CADSUS rate limited (status %d), retry %d/%d in 1s",
-                            resp.status_code, attempt + 1, max_retries,
+                            resp.status_code,
+                            attempt + 1,
+                            max_retries,
                         )
                         await asyncio.sleep(1)
                         if resp.status_code == 401:
@@ -152,9 +154,13 @@ class CadsusClient:
         cert_f.close()
 
         key_f = tempfile.NamedTemporaryFile(suffix=".pem", delete=False)  # noqa: SIM115
-        key_f.write(private_key.private_bytes(
-            Encoding.PEM, format=PrivateFormat.TraditionalOpenSSL, encryption_algorithm=NoEncryption(),
-        ))
+        key_f.write(
+            private_key.private_bytes(
+                Encoding.PEM,
+                format=PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=NoEncryption(),
+            )
+        )
         key_f.close()
 
         ctx = ssl.create_default_context()

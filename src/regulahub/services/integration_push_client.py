@@ -149,7 +149,10 @@ class IntegrationPushClient:
             dob = payload.get("date_of_birth", "")
             logger.warning(
                 "register_patient failed: %s %s | dob=%s cpf=%s",
-                resp.status_code, resp.text[:300], dob, payload.get("cpf", "")[:6],
+                resp.status_code,
+                resp.text[:300],
+                dob,
+                payload.get("cpf", "")[:6],
             )
             return None
         except Exception:
@@ -293,12 +296,15 @@ class IntegrationPushClient:
 
             if patient_id:
                 # Update existing patient
-                await self.update_patient(patient_id, {
-                    "first_name": appointment.get("patient_first_name", ""),
-                    "last_name": appointment.get("patient_last_name", ""),
-                    "mothers_name": appointment.get("patient_mother_name", ""),
-                    "phone": appointment.get("patient_phone", ""),
-                })
+                await self.update_patient(
+                    patient_id,
+                    {
+                        "first_name": appointment.get("patient_first_name", ""),
+                        "last_name": appointment.get("patient_last_name", ""),
+                        "mothers_name": appointment.get("patient_mother_name", ""),
+                        "phone": appointment.get("patient_phone", ""),
+                    },
+                )
                 result.patient_updated = True
             else:
                 # Register new patient

@@ -129,9 +129,7 @@ async def test_process_appointment_full_flow_new_patient():
         return_value=Response(201, json={"id": "p-new", "cns": "111222333444555"})
     )
     # list_doctors
-    respx.get(f"{BASE_URL}/api/doctors").mock(
-        return_value=Response(200, json=[{"id": "d-001", "name": "DR. SILVA"}])
-    )
+    respx.get(f"{BASE_URL}/api/doctors").mock(return_value=Response(200, json=[{"id": "d-001", "name": "DR. SILVA"}]))
     # find_reminder: not found
     respx.get(f"{BASE_URL}/api/reminders").mock(return_value=Response(200, json=[]))
     # create_reminder
@@ -152,15 +150,11 @@ async def test_process_appointment_existing_patient_existing_reminder():
         return_value=Response(200, json=[{"id": "p-existing", "cns": "111222333444555"}])
     )
     # update_patient
-    respx.put(url__regex=rf"{BASE_URL}/api/patients/.*").mock(
-        return_value=Response(200, json={"id": "p-existing"})
-    )
+    respx.put(url__regex=rf"{BASE_URL}/api/patients/.*").mock(return_value=Response(200, json={"id": "p-existing"}))
     # list_doctors
     respx.get(f"{BASE_URL}/api/doctors").mock(return_value=Response(200, json=[]))
     # find_reminder: found
-    respx.get(f"{BASE_URL}/api/reminders").mock(
-        return_value=Response(200, json=[{"id": "r-existing"}])
-    )
+    respx.get(f"{BASE_URL}/api/reminders").mock(return_value=Response(200, json=[{"id": "r-existing"}]))
 
     async with IntegrationPushClient(_make_system(), _make_endpoints()) as client:
         result = await client.process_appointment(_make_enriched_appointment())

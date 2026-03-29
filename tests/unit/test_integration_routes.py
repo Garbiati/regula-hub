@@ -116,9 +116,7 @@ class TestGetExecutionStatus:
                 "regulahub.api.controllers.admin.integration_routes.get_execution_progress",
                 return_value=None,
             ),
-            patch(
-                "regulahub.api.controllers.admin.integration_routes.IntegrationExecutionRepository"
-            ) as mock_repo_cls,
+            patch("regulahub.api.controllers.admin.integration_routes.IntegrationExecutionRepository") as mock_repo_cls,
         ):
             mock_repo = mock_repo_cls.return_value
             mock_repo.get_by_id = AsyncMock(return_value=None)

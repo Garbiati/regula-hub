@@ -78,14 +78,24 @@ class TestEnrichWithCache:
         mock_settings.return_value = MagicMock(cadsus_enabled=False)
 
         # Seed cache with fresh entries
-        db_session.add(CachedEnrichment(
-            cns="CNS001", cpf="11111111111", phone="(92)99999-0001",
-            source="CADSUS", enriched_at=datetime.now(UTC),
-        ))
-        db_session.add(CachedEnrichment(
-            cns="CNS002", cpf="22222222222", phone="(92)99999-0002",
-            source="CADSUS", enriched_at=datetime.now(UTC),
-        ))
+        db_session.add(
+            CachedEnrichment(
+                cns="CNS001",
+                cpf="11111111111",
+                phone="(92)99999-0001",
+                source="CADSUS",
+                enriched_at=datetime.now(UTC),
+            )
+        )
+        db_session.add(
+            CachedEnrichment(
+                cns="CNS002",
+                cpf="22222222222",
+                phone="(92)99999-0002",
+                source="CADSUS",
+                enriched_at=datetime.now(UTC),
+            )
+        )
         await db_session.flush()
 
         resp = await client.post(
@@ -108,10 +118,15 @@ class TestEnrichWithCache:
         mock_settings.return_value = MagicMock(cadsus_enabled=False)
 
         stale_date = datetime.now(UTC) - timedelta(days=31)
-        db_session.add(CachedEnrichment(
-            cns="CNS001", cpf="11111111111", phone="(92)99999-0001",
-            source="CADSUS", enriched_at=stale_date,
-        ))
+        db_session.add(
+            CachedEnrichment(
+                cns="CNS001",
+                cpf="11111111111",
+                phone="(92)99999-0001",
+                source="CADSUS",
+                enriched_at=stale_date,
+            )
+        )
         await db_session.flush()
 
         resp = await client.post(
@@ -131,10 +146,15 @@ class TestEnrichWithCache:
         mock_settings.return_value = MagicMock(cadsus_enabled=False)
 
         # Only CNS001 is cached
-        db_session.add(CachedEnrichment(
-            cns="CNS001", cpf="11111111111", phone="(92)99999-0001",
-            source="CADSUS", enriched_at=datetime.now(UTC),
-        ))
+        db_session.add(
+            CachedEnrichment(
+                cns="CNS001",
+                cpf="11111111111",
+                phone="(92)99999-0001",
+                source="CADSUS",
+                enriched_at=datetime.now(UTC),
+            )
+        )
         await db_session.flush()
 
         resp = await client.post(

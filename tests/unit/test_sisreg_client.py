@@ -299,9 +299,7 @@ async def test_export_schedule_success():
     respx.get(f"{BASE_URL}/cgi-bin/gerenciador_solicitacao").mock(
         return_value=httpx.Response(200, text="<html><body>OK</body></html>")
     )
-    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
-        return_value=httpx.Response(200, text=EXPORT_FORM_HTML)
-    )
+    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(return_value=httpx.Response(200, text=EXPORT_FORM_HTML))
     export_route = respx.post(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
         return_value=httpx.Response(200, content=csv_bytes)
     )
@@ -329,9 +327,7 @@ async def test_export_schedule_custom_filters():
     respx.get(f"{BASE_URL}/cgi-bin/gerenciador_solicitacao").mock(
         return_value=httpx.Response(200, text="<html><body>OK</body></html>")
     )
-    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
-        return_value=httpx.Response(200, text=EXPORT_FORM_HTML)
-    )
+    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(return_value=httpx.Response(200, text=EXPORT_FORM_HTML))
     export_route = respx.post(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
         return_value=httpx.Response(200, content=b"header\r\n")
     )
@@ -363,9 +359,7 @@ async def test_export_schedule_session_expired_retry():
     respx.get(f"{BASE_URL}/cgi-bin/gerenciador_solicitacao").mock(
         return_value=httpx.Response(200, text="<html><body>OK</body></html>")
     )
-    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
-        return_value=httpx.Response(200, text=EXPORT_FORM_HTML)
-    )
+    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(return_value=httpx.Response(200, text=EXPORT_FORM_HTML))
     export_route = respx.post(f"{BASE_URL}/cgi-bin/expo_solicitacoes")
     export_route.side_effect = [
         httpx.Response(200, content=LOGIN_EXPIRED_HTML.encode()),
@@ -388,9 +382,7 @@ async def test_export_schedule_defaults():
     respx.get(f"{BASE_URL}/cgi-bin/gerenciador_solicitacao").mock(
         return_value=httpx.Response(200, text="<html><body>OK</body></html>")
     )
-    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
-        return_value=httpx.Response(200, text=EXPORT_FORM_HTML)
-    )
+    respx.get(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(return_value=httpx.Response(200, text=EXPORT_FORM_HTML))
     export_route = respx.post(f"{BASE_URL}/cgi-bin/expo_solicitacoes").mock(
         return_value=httpx.Response(200, content=b"header\r\n")
     )

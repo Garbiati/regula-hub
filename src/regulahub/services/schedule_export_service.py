@@ -249,13 +249,15 @@ async def persist_export_rows(
     for row in rows:
         if not row.solicitacao:
             continue
-        dicts.append({
-            "solicitacao": row.solicitacao,
-            "data_agendamento": row.data_agendamento,
-            "data_agendamento_iso": _parse_date_ddmmyyyy(row.data_agendamento),
-            "descricao_procedimento": row.descricao_procedimento,
-            "row_data": row.model_dump(),
-        })
+        dicts.append(
+            {
+                "solicitacao": row.solicitacao,
+                "data_agendamento": row.data_agendamento,
+                "data_agendamento_iso": _parse_date_ddmmyyyy(row.data_agendamento),
+                "descricao_procedimento": row.descricao_procedimento,
+                "row_data": row.model_dump(),
+            }
+        )
 
     if not dicts:
         return 0
