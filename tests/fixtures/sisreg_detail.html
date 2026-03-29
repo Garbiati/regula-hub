@@ -1,75 +1,262 @@
 <html>
 <body>
 <div id="fichaAmbulatorial">
-<table>
-<!-- tbody 1: Requesting unit -->
-<tbody>
-<tr><td>Unidade Solicitante</td></tr>
-<tr><td>UBS CENTRO - RJ</td></tr>
-<tr><td>1234567</td></tr>
+<table class='table_listagem' width='700'>
+<!-- Implicit tbody 1: Chave de Confirmacao -->
+<tr>
+  <td style='text-align: left;'><b>Chave de Confirma&#231;&#227;o:</b></td>
+</tr>
+<tr>
+  <td style='text-align: left; font-size: 180%;'><b>CONF-ABC-123</b></td>
+</tr>
+<!-- Explicit tbody 2: Unidade Solicitante (FichaCompleta) -->
+<tbody class="FichaCompleta">
+<tr>
+  <td colspan='6' class='td_titulo_tabela'>UNIDADE SOLICITANTE</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Unidade Solicitante:</b></td>
+  <td colspan='1'><b>C&oacute;d. CNES:</b></td>
+  <td colspan='1'><b>Op. Solicitante:</b></td>
+  <td colspan='1'><b>Op. Videofonista:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>UBS CENTRO - RJ</td>
+  <td colspan='1'>1234567</td>
+  <td colspan='1'>OPERADOR SOL 01</td>
+  <td colspan='1'>OPERADOR VIDEO 01</td>
+</tr>
 </tbody>
-<!-- tbody 2: Patient -->
-<tbody>
-<tr><td>Paciente</td></tr>
-<tr><td>Outros dados</td><td>898001234567890</td></tr>
-<tr><td>MARIA SILVA</td></tr>
-<tr><td>15/06/1980</td></tr>
+<!-- Implicit tbody 3: Unidade Executante (rows outside explicit tbody) -->
+<tr>
+  <td colspan='6' class='td_titulo_tabela'>UNIDADE EXECUTANTE</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Unidade Executante:</b></td>
+  <td colspan='1'><b>C&oacute;d. CNES:</b></td>
+  <td colspan='1'><b>Op. Autorizador:</b></td>
+  <td colspan='1'><b>Vaga Consumida:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>POLICLINICA CODAJAS</td>
+  <td colspan='1'>7654321</td>
+  <td colspan='1'>AUTORIZADOR 01</td>
+  <td colspan='1'>VAGA-001</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Endere&ccedil;o:</b></td>
+  <td colspan='1'><b>N&uacute;mero:</b></td>
+  <td colspan='1'><b>Complemento:</b></td>
+  <td colspan='1'><b>Data Aprova&ccedil;&atilde;o:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>AV CODAJAS</td>
+  <td colspan='1'>26</td>
+  <td colspan='1'>SALA 2</td>
+  <td colspan='1'>15/03/2026</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Telefone:</b></td>
+  <td colspan='1'><b>CEP:</b></td>
+  <td colspan='1'><b>Bairro:</b></td>
+  <td colspan='1'><b>Munic&iacute;pio:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>(92) 3333-4444</td>
+  <td colspan='1'>69065-130</td>
+  <td colspan='1'>CACHOEIRINHA</td>
+  <td colspan='1'>MANAUS</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Profissional Executante:</b></td>
+  <td colspan='3'><b>Data e Hor&aacute;rio de Atendimento:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>DR. CARLOS OLIVEIRA</td>
+  <td colspan='3'><font size="2"><b>QUI&nbsp;&#9679;&nbsp;20/03/2026&nbsp;&#9679;&nbsp;14h30min</b></font></td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='6'><b>Aviso</b></td>
+</tr>
+<tr>
+  <td colspan='6'>Paciente avisado por <b>OPERADOR 01</b> (18/03/2026)</td>
+</tr>
+<tr>
+  <td colspan='6' class='td_titulo_tabela'>Dados do Paciente</td>
+</tr>
+<!-- Explicit tbody 4: Dados do Paciente (FichaCompleta) -->
+<tbody class="FichaCompleta">
+<tr bgcolor='#F3F3F3'>
+  <td colspan='6'><b>CNS:</b></td>
+</tr>
+<tr>
+  <td colspan='6'><font color="blue">898001234567890</font></td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Nome do Paciente</b></td>
+  <td colspan='1'><b>Nome Social/Apelido:</b></td>
+  <td colspan='1'><b>Data de Nascimento:</b></td>
+  <td colspan='1'><b>Sexo:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>MARIA SILVA</td>
+  <td colspan='1'>---</td>
+  <td colspan='1'>15/06/1980 (45 anos)</td>
+  <td colspan='1'>FEMININO</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Nome da M&atilde;e</b></td>
+  <td colspan='2'><b>Ra&#231;a:</b></td>
+  <td colspan='1'><b>Tipo Sangu&#237;neo:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>ANA SILVA</td>
+  <td colspan='2'>PARDA</td>
+  <td colspan='1'>---</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Nacionalidade:</b></td>
+  <td colspan='3'><b>Munic&#237;pio de Nascimento:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>BRASILEIRA</td>
+  <td colspan='3'>MANAUS - AM</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Tipo Logradouro:</b></td>
+  <td colspan='2'><b>Logradouro:</b></td>
+  <td colspan='1'><b>Complemento:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>RUA</td>
+  <td colspan='2'>RUA DO PACIENTE</td>
+  <td colspan='1'>APT 101</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>N&uacute;mero:</b></td>
+  <td colspan='2'><b>Bairro:</b></td>
+  <td colspan='1'><b>CEP:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>50</td>
+  <td colspan='2'>CENTRO</td>
+  <td colspan='1'>69000-001</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Pa&#237;s de Resid&#234;ncia:</b></td>
+  <td colspan='3'><b>Munic&#237;pio de Resid&#234;ncia:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>BRASIL</td>
+  <td colspan='3'>MANAUS - AM</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan="6"><b>Telefone(s):</b></td>
+</tr>
+<tr>
+  <td colspan="6">(21) 99876-5432 <a href='#' onClick="popupListarTelefones('898001234567890')"><i>(Exibir Lista Detalhada)</i></a></td>
+</tr>
 </tbody>
-<!-- tbody 3: Doctor -->
-<tbody>
-<tr><td>Médico</td></tr>
-<tr><td>DR. CARLOS OLIVEIRA</td></tr>
-<tr><td>CRM-RJ 54321</td></tr>
+<!-- Explicit tbody 5: Dados do Paciente (FichaReduzida) -->
+<tbody class="FichaReduzida" style="display: none;">
+<tr bgcolor='#F3F3F3'>
+  <td colspan='2'><b>CNS:</b></td>
+  <td colspan='2'><b>Nome do Paciente</b></td>
+  <td colspan='2'><b>Nome Social/Apelido:</b></td>
+</tr>
+<tr>
+  <td colspan='2'>898001234567890</td>
+  <td colspan='2'>MARIA SILVA</td>
+  <td colspan='2'>---</td>
+</tr>
 </tbody>
-<!-- tbody 4: Solicitation -->
-<tbody>
-<tr><td>Solicitação</td><td>12345</td></tr>
-<tr><td>AGE/PEN/EXEC</td></tr>
-<tr><td>2</td></tr>
-<tr><td>I10</td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td>(11) 3456-7890 (Exibir Lista Detalhada)</td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td></td></tr>
-<tr><td>(21) 99876-5432</td></tr>
+<!-- Explicit tbody 6: Laudo / Justificativa (FichaCompleta) -->
+<tbody class="FichaCompleta">
+<tr bgcolor="#F3F3F3">
+  <td colspan="6"><b>Laudo / Justificativa:</b></td>
+</tr>
+<tr>
+  <td colspan="6">Paciente hipertenso, acompanhamento regular</td>
+</tr>
 </tbody>
-<!-- tbody 5: Procedure -->
-<tbody>
-<tr><td>Procedimento</td></tr>
-<tr><td>TELECONSULTA EM CARDIOLOGIA</td></tr>
-<tr><td>0301010072</td></tr>
+<!-- Explicit tbody 7: Historico (FichaCompleta) — may not exist in all appointments -->
+<tbody class="FichaCompleta">
+<tr>
+  <td class='td_titulo_tabela' colspan='6'>Hist&oacute;rico de Troca de Procedimentos</td>
+</tr>
+<tr>
+  <td colspan='6'>Nenhum registro encontrado.</td>
+</tr>
 </tbody>
-<!-- tbody 6: Scheduling -->
-<tbody>
-<tr><td>Agendamento</td></tr>
-<tr><td>20/03/2026</td></tr>
-<tr><td>CONF-ABC-123</td></tr>
+<!-- Implicit tbody 8: Header "Dados da Solicitacao" -->
+<tr>
+  <td colspan='6' class='td_titulo_tabela'>Dados da Solicita&ccedil;&atilde;o</td>
+</tr>
+<!-- Explicit tbody 9: Dados da Solicitacao (FichaCompleta) -->
+<tbody class="FichaCompleta">
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>C&oacute;digo da Solicita&ccedil;&atilde;o:</b></td>
+  <td colspan='3'><b>Situa&ccedil;&atilde;o Atual:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>12345</td>
+  <td colspan='3'>AGE/PEN/EXEC</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='2'><b>CPF do M&eacute;dico Solicitante:</b></td>
+  <td colspan='1'><b>CRM:</b></td>
+  <td colspan='2'><b>Nome M&eacute;dico Solicitante:</b></td>
+  <td colspan='1'><b>Vaga Solicitada:</b></td>
+</tr>
+<tr>
+  <td colspan='2'>123.456.789-00</td>
+  <td colspan='1'>CRM-RJ 54321</td>
+  <td colspan='2'>DR. CARLOS OLIVEIRA</td>
+  <td colspan='1'>1a Vez</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Diagn&oacute;stico Inicial:</b></td>
+  <td colspan='1'><b>CID:</b></td>
+  <td colspan='2'><b>Risco:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>Hipertensao arterial</td>
+  <td colspan='1'>I10</td>
+  <td colspan='2'><b><font color="green">VERDE</font></b> - Nao Urgente</td>
+</tr>
+<tr bgcolor='#F3F3F3'>
+  <td colspan='6'><b>Central Reguladora:</b></td>
+</tr>
+<tr>
+  <td colspan='6'>CENTRAL ESTADUAL RJ</td>
+</tr>
 </tbody>
-<!-- tbody 7: Operators -->
-<tbody>
-<tr><td>Operadores</td></tr>
-<tr><td>OPERADOR VIDEO 01</td></tr>
-<tr><td>OPERADOR SOL 01</td></tr>
+<!-- Explicit tbody 10: Dados da Solicitacao (FichaReduzida) -->
+<tbody class="FichaReduzida" style="display:none;">
+<tr bgcolor='#F3F3F3'>
+  <td colspan='2'><b>C&oacute;digo:</b></td>
+  <td colspan='3'><b>Situa&ccedil;&atilde;o:</b></td>
+  <td colspan='1'><b>Vaga:</b></td>
+</tr>
+<tr>
+  <td colspan='2'>12345</td>
+  <td colspan='3'>AGE/PEN/EXEC</td>
+  <td colspan='1'>1a Vez</td>
+</tr>
 </tbody>
-<!-- tbody 8: Regulatory center -->
-<tbody>
-<tr><td>Central de Regulação</td></tr>
-<tr><td>CENTRAL ESTADUAL RJ</td></tr>
-<tr><td>DEPARTAMENTO CARDIOLOGIA</td></tr>
-<tr><td>7654321</td></tr>
-<tr><td>ALTA</td></tr>
-</tbody>
-<!-- tbody 9: Observations -->
-<tbody>
-<tr><td>Observações</td></tr>
-<tr><td>Paciente hipertenso, acompanhamento regular</td></tr>
+<!-- Implicit tbody 11: Procedimentos Solicitados -->
+<tr bgcolor='#F3F3F3'>
+  <td colspan='3'><b>Procedimentos Solicitados:</b></td>
+  <td colspan='1'><b>C&oacute;d. Unificado:</b></td>
+  <td colspan='2'><b>C&oacute;d. Interno:</b></td>
+</tr>
+<tr>
+  <td colspan='3'>TELECONSULTA EM CARDIOLOGIA</td>
+  <td colspan='1'>0301010072</td>
+  <td colspan='2'>0739144</td>
+</tr>
+<!-- Explicit tbody 12: empty (FichaCompleta) -->
+<tbody class="FichaCompleta">
 </tbody>
 </table>
 </div>

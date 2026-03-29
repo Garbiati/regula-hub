@@ -145,10 +145,10 @@ def map_detail_to_absens(
         cns=detail.patient_cns or "",
         patient_phones=patient_phones,
         department_solicitation=detail.req_unit_name or "",
-        department_execute=detail.department or "",
-        appointment_date=format_appointment_date(detail.appointment_date),
+        department_execute=detail.exec_unit_name or "",
+        appointment_date=format_appointment_date(detail.exec_unit_appointment_datetime),
         status_sisreg=detail.sol_status or "",
-        doctor_execute=detail.doctor_name or "",
+        doctor_execute=detail.sol_doctor_name or "",
         best_phone=best_phone,
         department_solicitation_infos=dept_sol_infos,
     )

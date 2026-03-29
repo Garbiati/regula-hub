@@ -16,26 +16,37 @@ from regulahub.sisreg.selectors import (
     COL_REQUEST_DATE,
     COL_RISK,
     COL_STATUS,
-    DETAIL_APPOINTMENT_DATE,
-    DETAIL_CNES,
     DETAIL_CONFIRMATION_KEY,
-    DETAIL_DEPARTMENT,
-    DETAIL_DOCTOR_CRM,
-    DETAIL_DOCTOR_NAME,
-    DETAIL_OBSERVATIONS,
+    DETAIL_EXEC_UNIT_ADDRESS,
+    DETAIL_EXEC_UNIT_ADDRESS_COMPLEMENT,
+    DETAIL_EXEC_UNIT_ADDRESS_NUMBER,
+    DETAIL_EXEC_UNIT_APPOINTMENT_DATETIME,
+    DETAIL_EXEC_UNIT_APPROVAL_DATE,
+    DETAIL_EXEC_UNIT_AUTHORIZER,
+    DETAIL_EXEC_UNIT_CEP,
+    DETAIL_EXEC_UNIT_CNES,
+    DETAIL_EXEC_UNIT_MUNICIPALITY,
+    DETAIL_EXEC_UNIT_NAME,
+    DETAIL_EXEC_UNIT_NEIGHBORHOOD,
+    DETAIL_EXEC_UNIT_PHONE,
+    DETAIL_EXEC_UNIT_PROFESSIONAL,
+    DETAIL_EXEC_UNIT_SLOT,
+    DETAIL_JUSTIFICATION,
     DETAIL_PATIENT_BIRTH_DATE,
     DETAIL_PATIENT_CNS,
     DETAIL_PATIENT_NAME,
     DETAIL_PHONE_FALLBACK,
     DETAIL_PHONE_PRIMARY,
-    DETAIL_PRIORITY,
     DETAIL_PROCEDURE_CODE,
     DETAIL_PROCEDURE_NAME,
-    DETAIL_REGULATORY_CENTER,
     DETAIL_REQ_UNIT_CNES,
     DETAIL_REQ_UNIT_NAME,
     DETAIL_SOL_CID,
     DETAIL_SOL_CODE,
+    DETAIL_SOL_DOCTOR_CPF,
+    DETAIL_SOL_DOCTOR_CRM,
+    DETAIL_SOL_DOCTOR_NAME,
+    DETAIL_SOL_REGULATORY_CENTER,
     DETAIL_SOL_RISK,
     DETAIL_SOL_STATUS,
     DETAIL_SOLICITATION_OPERATOR,
@@ -242,44 +253,53 @@ def parse_cadweb(html: str) -> CadwebPatientData:
 
 
 def parse_detail(html: str) -> AppointmentDetail:
-    """Parse SisReg detail page HTML into AppointmentDetail model."""
+    """Parse SisReg detail page HTML (12-tbody fichaAmbulatorial) into AppointmentDetail model."""
     tree = HTMLParser(html)
 
     phone = extract_phone(html)
 
     return AppointmentDetail(
-        # Requesting unit
+        # tbody 1 — Confirmation key
+        confirmation_key=_text(tree, DETAIL_CONFIRMATION_KEY),
+        # tbody 2 — Requesting unit
         req_unit_name=_text(tree, DETAIL_REQ_UNIT_NAME),
         req_unit_cnes=_text(tree, DETAIL_REQ_UNIT_CNES),
-        # Patient
+        solicitation_operator=_text(tree, DETAIL_SOLICITATION_OPERATOR),
+        videocall_operator=_text(tree, DETAIL_VIDEOCALL_OPERATOR),
+        # tbody 3 — Executing unit
+        exec_unit_name=_text(tree, DETAIL_EXEC_UNIT_NAME),
+        exec_unit_cnes=_text(tree, DETAIL_EXEC_UNIT_CNES),
+        exec_unit_authorizer=_text(tree, DETAIL_EXEC_UNIT_AUTHORIZER),
+        exec_unit_slot=_text(tree, DETAIL_EXEC_UNIT_SLOT),
+        exec_unit_address=_text(tree, DETAIL_EXEC_UNIT_ADDRESS),
+        exec_unit_address_number=_text(tree, DETAIL_EXEC_UNIT_ADDRESS_NUMBER),
+        exec_unit_address_complement=_text(tree, DETAIL_EXEC_UNIT_ADDRESS_COMPLEMENT),
+        exec_unit_approval_date=_text(tree, DETAIL_EXEC_UNIT_APPROVAL_DATE),
+        exec_unit_phone=_text(tree, DETAIL_EXEC_UNIT_PHONE),
+        exec_unit_cep=_text(tree, DETAIL_EXEC_UNIT_CEP),
+        exec_unit_neighborhood=_text(tree, DETAIL_EXEC_UNIT_NEIGHBORHOOD),
+        exec_unit_municipality=_text(tree, DETAIL_EXEC_UNIT_MUNICIPALITY),
+        exec_unit_professional=_text(tree, DETAIL_EXEC_UNIT_PROFESSIONAL),
+        exec_unit_appointment_datetime=_text(tree, DETAIL_EXEC_UNIT_APPOINTMENT_DATETIME),
+        # tbody 4 — Patient
         patient_cns=_text(tree, DETAIL_PATIENT_CNS),
         patient_name=_text(tree, DETAIL_PATIENT_NAME),
         patient_birth_date=_text(tree, DETAIL_PATIENT_BIRTH_DATE),
         patient_phone=phone.raw if phone else None,
-        # Doctor
-        doctor_name=_text(tree, DETAIL_DOCTOR_NAME),
-        doctor_crm=_text(tree, DETAIL_DOCTOR_CRM),
-        # Solicitation
+        # tbody 6 — Justification
+        justification=_text(tree, DETAIL_JUSTIFICATION),
+        # tbody 9 — Solicitation
         sol_code=_text(tree, DETAIL_SOL_CODE),
         sol_status=_text(tree, DETAIL_SOL_STATUS),
-        sol_risk=_text(tree, DETAIL_SOL_RISK),
+        sol_doctor_cpf=_text(tree, DETAIL_SOL_DOCTOR_CPF),
+        sol_doctor_crm=_text(tree, DETAIL_SOL_DOCTOR_CRM),
+        sol_doctor_name=_text(tree, DETAIL_SOL_DOCTOR_NAME),
         sol_cid=_text(tree, DETAIL_SOL_CID),
-        # Procedure
+        sol_risk=_text(tree, DETAIL_SOL_RISK),
+        sol_regulatory_center=_text(tree, DETAIL_SOL_REGULATORY_CENTER),
+        # tbody 11 — Procedure
         procedure_name=_text(tree, DETAIL_PROCEDURE_NAME),
         procedure_code=_text(tree, DETAIL_PROCEDURE_CODE),
-        # Scheduling
-        appointment_date=_text(tree, DETAIL_APPOINTMENT_DATE),
-        confirmation_key=_text(tree, DETAIL_CONFIRMATION_KEY),
-        # Operators
-        videocall_operator=_text(tree, DETAIL_VIDEOCALL_OPERATOR),
-        solicitation_operator=_text(tree, DETAIL_SOLICITATION_OPERATOR),
-        # Regulatory center
-        regulatory_center=_text(tree, DETAIL_REGULATORY_CENTER),
-        department=_text(tree, DETAIL_DEPARTMENT),
-        cnes=_text(tree, DETAIL_CNES),
-        priority=_text(tree, DETAIL_PRIORITY),
-        # Observations
-        observations=_text(tree, DETAIL_OBSERVATIONS),
         # Phone
         best_phone=phone,
     )

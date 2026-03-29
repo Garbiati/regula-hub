@@ -75,38 +75,47 @@ class BestPhone(BaseModel):
 
 
 class AppointmentDetail(BaseModel):
-    # Requesting unit
+    # Confirmation key (tbody 1)
+    confirmation_key: str | None = None
+    # Requesting unit (tbody 2)
     req_unit_name: str | None = None
     req_unit_cnes: str | None = None
-    # Patient
+    solicitation_operator: str | None = None
+    videocall_operator: str | None = None
+    # Executing unit (tbody 3) — critical for integration routing
+    exec_unit_name: str | None = None
+    exec_unit_cnes: str | None = None
+    exec_unit_authorizer: str | None = None
+    exec_unit_slot: str | None = None
+    exec_unit_address: str | None = None
+    exec_unit_address_number: str | None = None
+    exec_unit_address_complement: str | None = None
+    exec_unit_approval_date: str | None = None
+    exec_unit_phone: str | None = None
+    exec_unit_cep: str | None = None
+    exec_unit_neighborhood: str | None = None
+    exec_unit_municipality: str | None = None
+    exec_unit_professional: str | None = None
+    exec_unit_appointment_datetime: str | None = None
+    # Patient (tbody 4)
     patient_cns: str | None = None
     patient_name: str | None = None
     patient_birth_date: str | None = None
     patient_phone: str | None = None
-    # Doctor
-    doctor_name: str | None = None
-    doctor_crm: str | None = None
-    # Solicitation
+    # Justification (tbody 6)
+    justification: str | None = None
+    # Solicitation (tbody 9)
     sol_code: str | None = None
     sol_status: str | None = None
-    sol_risk: str | None = None
+    sol_doctor_cpf: str | None = None
+    sol_doctor_crm: str | None = None
+    sol_doctor_name: str | None = None
     sol_cid: str | None = None
-    # Procedure
+    sol_risk: str | None = None
+    sol_regulatory_center: str | None = None
+    # Procedure (tbody 11)
     procedure_name: str | None = None
     procedure_code: str | None = None
-    # Scheduling
-    appointment_date: str | None = None
-    confirmation_key: str | None = None
-    # Operators
-    videocall_operator: str | None = None
-    solicitation_operator: str | None = None
-    # Regulatory center
-    regulatory_center: str | None = None
-    department: str | None = None
-    cnes: str | None = None
-    priority: str | None = None
-    # Observations
-    observations: str | None = None
     # Phone
     best_phone: BestPhone | None = None
 

@@ -53,52 +53,78 @@ COL_STATUS = 12
 # Total columns expected per row
 LISTING_COLUMN_COUNT = 13
 
-# ── Detail page ────────────────────────────────────────────────────────────────
+# ── Detail page (fichaAmbulatorial) ───────────────────────────────────────────
+# Validated against REAL SisReg HTML captured 2026-03-29.
+# The lexbor parser creates 12 implicit tbodies from the mixed HTML structure:
+#   tbody 1: Chave de Confirmação (implicit, from <tr> before first explicit <tbody>)
+#   tbody 2: Unidade Solicitante (explicit FichaCompleta)
+#   tbody 3: Unidade Executante (implicit, from <tr> between tbodies)
+#   tbody 4: Dados do Paciente — ficha completa (explicit FichaCompleta)
+#   tbody 5: Dados do Paciente — ficha reduzida (explicit FichaReduzida, display:none)
+#   tbody 6: Laudo / Justificativa (explicit FichaCompleta)
+#   tbody 7: Histórico de Troca de Procedimentos (explicit FichaCompleta)
+#   tbody 8: Header "Dados da Solicitação" (implicit)
+#   tbody 9: Dados da Solicitação — ficha completa (explicit FichaCompleta)
+#   tbody 10: Dados da Solicitação — ficha reduzida (explicit FichaReduzida)
+#   tbody 11: Procedimentos Solicitados (implicit)
+#   tbody 12: empty (explicit FichaCompleta)
 DETAIL_FICHA = "#fichaAmbulatorial"
 
-# Requesting unit
-DETAIL_REQ_UNIT_NAME = "#fichaAmbulatorial tbody:nth-child(1) tr:nth-child(2) td"
-DETAIL_REQ_UNIT_CNES = "#fichaAmbulatorial tbody:nth-child(1) tr:nth-child(3) td"
+# tbody 1 — Chave de Confirmação
+DETAIL_CONFIRMATION_KEY = "#fichaAmbulatorial tbody:nth-child(1) tr:nth-child(2) td"
 
-# Patient
-DETAIL_PATIENT_CNS = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(2) td:nth-child(2)"
-DETAIL_PATIENT_NAME = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(3) td"
-DETAIL_PATIENT_BIRTH_DATE = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(4) td"
+# tbody 2 — Unidade Solicitante (row 1=title, row 2=labels, row 3=values)
+DETAIL_REQ_UNIT_NAME = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(3) td:nth-child(1)"
+DETAIL_REQ_UNIT_CNES = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(3) td:nth-child(2)"
+DETAIL_SOLICITATION_OPERATOR = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(3) td:nth-child(3)"
+DETAIL_VIDEOCALL_OPERATOR = "#fichaAmbulatorial tbody:nth-child(2) tr:nth-child(3) td:nth-child(4)"
 
-# Doctor
-DETAIL_DOCTOR_NAME = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(2) td"
-DETAIL_DOCTOR_CRM = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(3) td"
+# tbody 3 — Unidade Executante (critical for integration routing)
+# Row layout: 1=title, 2=labels, 3=values, 4=labels, 5=values, 6=labels, 7=values, 8=labels, 9=values
+DETAIL_EXEC_UNIT_NAME = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(3) td:nth-child(1)"
+DETAIL_EXEC_UNIT_CNES = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(3) td:nth-child(2)"
+DETAIL_EXEC_UNIT_AUTHORIZER = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(3) td:nth-child(3)"
+DETAIL_EXEC_UNIT_SLOT = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(3) td:nth-child(4)"
+DETAIL_EXEC_UNIT_ADDRESS = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(5) td:nth-child(1)"
+DETAIL_EXEC_UNIT_ADDRESS_NUMBER = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(5) td:nth-child(2)"
+DETAIL_EXEC_UNIT_ADDRESS_COMPLEMENT = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(5) td:nth-child(3)"
+DETAIL_EXEC_UNIT_APPROVAL_DATE = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(5) td:nth-child(4)"
+DETAIL_EXEC_UNIT_PHONE = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(7) td:nth-child(1)"
+DETAIL_EXEC_UNIT_CEP = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(7) td:nth-child(2)"
+DETAIL_EXEC_UNIT_NEIGHBORHOOD = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(7) td:nth-child(3)"
+DETAIL_EXEC_UNIT_MUNICIPALITY = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(7) td:nth-child(4)"
+DETAIL_EXEC_UNIT_PROFESSIONAL = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(9) td:nth-child(1)"
+DETAIL_EXEC_UNIT_APPOINTMENT_DATETIME = "#fichaAmbulatorial tbody:nth-child(3) tr:nth-child(9) td:nth-child(2)"
 
-# Solicitation
-DETAIL_SOL_CODE = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(1) td:nth-child(2)"
-DETAIL_SOL_STATUS = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(2) td"
-DETAIL_SOL_RISK = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(3) td"
-DETAIL_SOL_CID = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(4) td"
+# tbody 4 — Dados do Paciente (ficha completa)
+# Row layout: 1=CNS label, 2=CNS value, 3=labels, 4=values(name,social,birth,sex)
+DETAIL_PATIENT_CNS = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(2) td"
+DETAIL_PATIENT_NAME = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(4) td:nth-child(1)"
+DETAIL_PATIENT_BIRTH_DATE = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(4) td:nth-child(3)"
 
-# Procedure
-DETAIL_PROCEDURE_NAME = "#fichaAmbulatorial tbody:nth-child(5) tr:nth-child(2) td"
-DETAIL_PROCEDURE_CODE = "#fichaAmbulatorial tbody:nth-child(5) tr:nth-child(3) td"
+# tbody 6 — Laudo / Justificativa
+DETAIL_JUSTIFICATION = "#fichaAmbulatorial tbody:nth-child(6) tr:nth-child(2) td"
 
-# Scheduling
-DETAIL_APPOINTMENT_DATE = "#fichaAmbulatorial tbody:nth-child(6) tr:nth-child(2) td"
-DETAIL_CONFIRMATION_KEY = "#fichaAmbulatorial tbody:nth-child(6) tr:nth-child(3) td"
+# tbody 9 — Dados da Solicitação (ficha completa)
+# Row layout: 1=labels(code,status), 2=values, 3=labels(cpf,crm,name,slot), 4=values,
+#             5=labels(diag,cid,risk), 6=values, 7=label(central), 8=value
+DETAIL_SOL_CODE = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(2) td:nth-child(1)"
+DETAIL_SOL_STATUS = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(2) td:nth-child(2)"
+DETAIL_SOL_DOCTOR_CPF = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(4) td:nth-child(1)"
+DETAIL_SOL_DOCTOR_CRM = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(4) td:nth-child(2)"
+DETAIL_SOL_DOCTOR_NAME = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(4) td:nth-child(3)"
+DETAIL_SOL_CID = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(6) td:nth-child(2)"
+DETAIL_SOL_RISK = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(6) td:nth-child(3)"
+DETAIL_SOL_REGULATORY_CENTER = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(8) td"
 
-# Operators
-DETAIL_VIDEOCALL_OPERATOR = "#fichaAmbulatorial tbody:nth-child(7) tr:nth-child(2) td"
-DETAIL_SOLICITATION_OPERATOR = "#fichaAmbulatorial tbody:nth-child(7) tr:nth-child(3) td"
+# tbody 11 — Procedimentos Solicitados
+# Row layout: 1=labels(proc,unif,int), 2=values
+DETAIL_PROCEDURE_NAME = "#fichaAmbulatorial tbody:nth-child(11) tr:nth-child(2) td:nth-child(1)"
+DETAIL_PROCEDURE_CODE = "#fichaAmbulatorial tbody:nth-child(11) tr:nth-child(2) td:nth-child(2)"
 
-# Regulatory center
-DETAIL_REGULATORY_CENTER = "#fichaAmbulatorial tbody:nth-child(8) tr:nth-child(2) td"
-DETAIL_DEPARTMENT = "#fichaAmbulatorial tbody:nth-child(8) tr:nth-child(3) td"
-DETAIL_CNES = "#fichaAmbulatorial tbody:nth-child(8) tr:nth-child(4) td"
-DETAIL_PRIORITY = "#fichaAmbulatorial tbody:nth-child(8) tr:nth-child(5) td"
-
-# Observations
-DETAIL_OBSERVATIONS = "#fichaAmbulatorial tbody:nth-child(9) tr:nth-child(2) td"
-
-# Phone extraction — primary and fallback selectors
+# Phone extraction — in patient section (tbody 4)
 DETAIL_PHONE_PRIMARY = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(16) td"
-DETAIL_PHONE_FALLBACK = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(12) td"
+DETAIL_PHONE_FALLBACK = "#fichaAmbulatorial tbody:nth-child(4) tr:nth-child(14) td"
 
 # ── CadWeb (Consulta CNS) ────────────────────────────────────────────────────
 CADWEB_CGI_PATH = "/cgi-bin/cadweb50"

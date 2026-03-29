@@ -57,32 +57,51 @@ class TestParseListing:
 
 
 class TestParseDetail:
+    def test_parses_confirmation_key(self):
+        html = _read_fixture("sisreg_detail.html")
+        detail = parse_detail(html)
+        assert detail.confirmation_key == "CONF-ABC-123"
+
     def test_parses_requesting_unit(self):
         html = _read_fixture("sisreg_detail.html")
         detail = parse_detail(html)
         assert detail.req_unit_name == "UBS CENTRO - RJ"
         assert detail.req_unit_cnes == "1234567"
+        assert detail.solicitation_operator == "OPERADOR SOL 01"
+        assert detail.videocall_operator == "OPERADOR VIDEO 01"
+
+    def test_parses_executing_unit(self):
+        html = _read_fixture("sisreg_detail.html")
+        detail = parse_detail(html)
+        assert detail.exec_unit_name == "POLICLINICA CODAJAS"
+        assert detail.exec_unit_cnes == "7654321"
+        assert detail.exec_unit_authorizer == "AUTORIZADOR 01"
+        assert detail.exec_unit_address == "AV CODAJAS"
+        assert detail.exec_unit_address_number == "26"
+        assert detail.exec_unit_address_complement == "SALA 2"
+        assert detail.exec_unit_cep == "69065-130"
+        assert detail.exec_unit_neighborhood == "CACHOEIRINHA"
+        assert detail.exec_unit_municipality == "MANAUS"
+        assert detail.exec_unit_professional == "DR. CARLOS OLIVEIRA"
 
     def test_parses_patient(self):
         html = _read_fixture("sisreg_detail.html")
         detail = parse_detail(html)
         assert detail.patient_cns == "898001234567890"
         assert detail.patient_name == "MARIA SILVA"
-        assert detail.patient_birth_date == "15/06/1980"
-
-    def test_parses_doctor(self):
-        html = _read_fixture("sisreg_detail.html")
-        detail = parse_detail(html)
-        assert detail.doctor_name == "DR. CARLOS OLIVEIRA"
-        assert detail.doctor_crm == "CRM-RJ 54321"
+        assert detail.patient_birth_date == "15/06/1980 (45 anos)"
 
     def test_parses_solicitation(self):
         html = _read_fixture("sisreg_detail.html")
         detail = parse_detail(html)
         assert detail.sol_code == "12345"
         assert detail.sol_status == "AGE/PEN/EXEC"
-        assert detail.sol_risk == "2"
         assert detail.sol_cid == "I10"
+        assert detail.sol_risk == "VERDE- Nao Urgente"
+        assert detail.sol_doctor_cpf == "123.456.789-00"
+        assert detail.sol_doctor_crm == "CRM-RJ 54321"
+        assert detail.sol_doctor_name == "DR. CARLOS OLIVEIRA"
+        assert detail.sol_regulatory_center == "CENTRAL ESTADUAL RJ"
 
     def test_parses_procedure(self):
         html = _read_fixture("sisreg_detail.html")
@@ -90,34 +109,23 @@ class TestParseDetail:
         assert detail.procedure_name == "TELECONSULTA EM CARDIOLOGIA"
         assert detail.procedure_code == "0301010072"
 
-    def test_parses_scheduling(self):
+    def test_parses_justification(self):
         html = _read_fixture("sisreg_detail.html")
         detail = parse_detail(html)
-        assert detail.appointment_date == "20/03/2026"
-        assert detail.confirmation_key == "CONF-ABC-123"
-
-    def test_parses_operators(self):
-        html = _read_fixture("sisreg_detail.html")
-        detail = parse_detail(html)
-        assert detail.videocall_operator == "OPERADOR VIDEO 01"
-        assert detail.solicitation_operator == "OPERADOR SOL 01"
-
-    def test_parses_regulatory_center(self):
-        html = _read_fixture("sisreg_detail.html")
-        detail = parse_detail(html)
-        assert detail.regulatory_center == "CENTRAL ESTADUAL RJ"
-        assert detail.department == "DEPARTAMENTO CARDIOLOGIA"
-        assert detail.cnes == "7654321"
-        assert detail.priority == "ALTA"
-
-    def test_parses_observations(self):
-        html = _read_fixture("sisreg_detail.html")
-        detail = parse_detail(html)
-        assert detail.observations == "Paciente hipertenso, acompanhamento regular"
+        assert detail.justification == "Paciente hipertenso, acompanhamento regular"
 
 
 class TestExtractPhone:
+    def test_extracts_mobile_from_fixture(self):
+        html = _read_fixture("sisreg_detail.html")
+        phone = extract_phone(html)
+        assert phone is not None
+        assert phone.ddd == "21"
+        assert phone.number == "99876-5432"
+        assert phone.phone_type == "mobile"
+
     def test_extracts_mobile_phone(self):
+        # Phone at tbody 4, row 16 (DETAIL_PHONE_PRIMARY position)
         html = """
         <div id="fichaAmbulatorial"><table>
         <tbody></tbody><tbody></tbody><tbody></tbody>
@@ -137,13 +145,15 @@ class TestExtractPhone:
         assert phone.phone_type == "mobile"
 
     def test_cleans_exibir_lista_text(self):
+        # Phone at tbody 4, row 14 (DETAIL_PHONE_FALLBACK position)
         html = """
         <div id="fichaAmbulatorial"><table>
         <tbody></tbody><tbody></tbody><tbody></tbody>
         <tbody>
         <tr><td></td></tr><tr><td></td></tr><tr><td></td></tr><tr><td></td></tr>
         <tr><td></td></tr><tr><td></td></tr><tr><td></td></tr><tr><td></td></tr>
-        <tr><td></td></tr><tr><td></td></tr><tr><td></td></tr>
+        <tr><td></td></tr><tr><td></td></tr><tr><td></td></tr><tr><td></td></tr>
+        <tr><td></td></tr>
         <tr><td>(11) 3456-7890 (Exibir Lista Detalhada)</td></tr>
         </tbody>
         </table></div>

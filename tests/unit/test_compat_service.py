@@ -151,10 +151,10 @@ class TestMapDetailToAbsens:
             confirmation_key="CONF-ABC-123",
             patient_name="MARIA DA SILVA",
             patient_cns="898001234567890",
-            appointment_date="20/03/2026 14:30",
+            exec_unit_appointment_datetime="20/03/2026 14:30",
             best_phone=BestPhone(raw="(92) 98765-4321", ddd="92", number="98765-4321"),
-            department="HOSPITAL REGIONAL DE MANAUS",
-            doctor_name="DR. JOAO SOUZA",
+            exec_unit_name="HOSPITAL REGIONAL DE MANAUS",
+            sol_doctor_name="DR. JOAO SOUZA",
             req_unit_name="UBS CENTRO",
             req_unit_cnes="1234567",
             sol_status="AGE/PEN/EXEC",
@@ -386,7 +386,7 @@ class TestFetchDetail:
             sol_code="12345",
             confirmation_key="CONF-123",
             patient_cns="898001234567890",
-            appointment_date="20/03/2026",
+            exec_unit_appointment_datetime="20/03/2026",
         )
         cadweb = CadwebPatientData(cpf="33525528272", phone_ddd="92", phone_number="99211-9712")
 
