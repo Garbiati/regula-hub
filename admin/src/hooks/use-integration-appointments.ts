@@ -81,6 +81,36 @@ export function useRetryAppointment() {
   });
 }
 
+export function useExportIntegrationAppointmentsCsv() {
+  const t = useTranslations();
+  return useMutation({
+    mutationFn: async (params: { status?: string }) => {
+      const queryParams: Record<string, string | undefined> = {};
+      if (params.status) queryParams.status = params.status;
+
+      const blob = await apiClient.getBlob(
+        "/api/admin/integrations/appointments/export/csv",
+        queryParams,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `integration_appointments_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast.success(t("appointments.export_csv_success"));
+    },
+    onError: (err) => {
+      const detail = err instanceof ApiError ? err.detail : undefined;
+      toast.error(detail ?? t("appointments.export_csv_error"));
+    },
+  });
+}
+
 export function useCancelAppointment() {
   const qc = useQueryClient();
   const t = useTranslations();

@@ -411,5 +411,8 @@
   "appointments.toast_retried": "Retry requested",
   "appointments.toast_retry_failed": "Retry failed",
   "appointments.toast_cancelled": "Appointment cancelled",
-  "appointments.toast_cancel_failed": "Failed to cancel"
+  "appointments.toast_cancel_failed": "Failed to cancel",
+  "appointments.btn_export_csv": "Export CSV",
+  "appointments.export_csv_success": "CSV exported successfully",
+  "appointments.export_csv_error": "Failed to export CSV"
 }

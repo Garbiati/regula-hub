@@ -411,5 +411,8 @@
   "appointments.toast_retried": "Retry solicitado",
   "appointments.toast_retry_failed": "Falha no retry",
   "appointments.toast_cancelled": "Agendamento cancelado",
-  "appointments.toast_cancel_failed": "Falha ao cancelar"
+  "appointments.toast_cancel_failed": "Falha ao cancelar",
+  "appointments.btn_export_csv": "Exportar CSV",
+  "appointments.export_csv_success": "CSV exportado com sucesso",
+  "appointments.export_csv_error": "Falha ao exportar CSV"
 }
