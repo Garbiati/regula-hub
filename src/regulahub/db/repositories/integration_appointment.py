@@ -126,6 +126,25 @@ class IntegrationAppointmentRepository:
 
         return items, total
 
+    async def list_all_filtered(
+        self,
+        status: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[IntegrationAppointment]:
+        """List ALL appointments matching filters without pagination. For export use."""
+        base = select(IntegrationAppointment).where(IntegrationAppointment.is_active.is_(True))
+
+        if status is not None:
+            base = base.where(IntegrationAppointment.status == status)
+        if date_from is not None:
+            base = base.where(IntegrationAppointment.appointment_date >= date_from)
+        if date_to is not None:
+            base = base.where(IntegrationAppointment.appointment_date <= date_to)
+
+        result = await self._session.execute(base.order_by(IntegrationAppointment.created_at.desc()))
+        return list(result.scalars().all())
+
     async def bulk_create(self, items: list[dict]) -> int:
         """Batch insert appointment records. Returns count of inserted rows."""
         if not items:
@@ -135,6 +154,78 @@ class IntegrationAppointmentRepository:
         self._session.add_all(objects)
         await self._session.flush()
         return len(objects)
+
+    async def bulk_upsert(self, items: list[dict]) -> int:
+        """Upsert appointment records by regulation_code.
+
+        - Existing terminal records (completed, no_show, cancelled) are NOT overwritten.
+        - Existing non-terminal records are updated with new data.
+        - New records are inserted.
+        Returns count of inserted/updated rows.
+        """
+        if not items:
+            return 0
+
+        terminal_statuses = {"completed", "no_show", "cancelled"}
+        count = 0
+
+        for item_data in items:
+            regulation_code = item_data.get("regulation_code", "")
+            if not regulation_code:
+                continue
+
+            stmt = (
+                select(IntegrationAppointment)
+                .where(IntegrationAppointment.regulation_code == regulation_code)
+                .where(IntegrationAppointment.is_active.is_(True))
+                .order_by(IntegrationAppointment.created_at.desc())
+                .limit(1)
+            )
+            result = await self._session.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                if existing.status in terminal_statuses:
+                    continue
+                for key, value in item_data.items():
+                    if key != "id":
+                        setattr(existing, key, value)
+                existing.updated_at = datetime.now(UTC)
+            else:
+                self._session.add(IntegrationAppointment(**item_data))
+
+            count += 1
+
+        await self._session.flush()
+        return count
+
+    async def list_by_status(self, status: str, limit: int = 50) -> list[IntegrationAppointment]:
+        """List appointments by status, ordered by appointment_date ASC (oldest first).
+
+        Used by pipeline jobs to pick up work items in chronological order.
+        """
+        stmt = (
+            select(IntegrationAppointment)
+            .where(IntegrationAppointment.status == status)
+            .where(IntegrationAppointment.is_active.is_(True))
+            .order_by(IntegrationAppointment.appointment_date.asc(), IntegrationAppointment.created_at.asc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def exists_by_regulation_code(self, regulation_code: str) -> bool:
+        """Check if any active record with this regulation_code exists (any status).
+
+        Used by Job 1 (fetch) for deduplication — skip if already imported.
+        """
+        stmt = (
+            select(func.count(IntegrationAppointment.id))
+            .where(IntegrationAppointment.regulation_code == regulation_code)
+            .where(IntegrationAppointment.is_active.is_(True))
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one() > 0
 
     async def count_by_status(self, execution_id: uuid.UUID | None = None) -> dict[str, int]:
         """Count appointments grouped by status. Optionally filter by execution_id. Returns {status: count}."""

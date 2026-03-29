@@ -34,6 +34,15 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.startup_time = time.monotonic()
+
+    # Start pipeline background jobs (fetch → enrich → push)
+    from regulahub.services.integration_worker_service import start_pipeline_jobs
+
+    try:
+        await start_pipeline_jobs()
+    except Exception:
+        logger.exception("Failed to start pipeline jobs — pipeline will not run")
+
     yield
 
     from regulahub.db.engine import dispose_engine

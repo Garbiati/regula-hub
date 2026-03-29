@@ -123,14 +123,47 @@ class IntegrationSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     integration_api_key: str = Field("", description="API key for integration system (Core API + Auth API)")
-    integration_core_api_url: str = Field(
-        "https://api.sosportal.com.br/api/core/v1", description="Core API base URL"
-    )
-    integration_auth_api_url: str = Field(
-        "https://api.sosportal.com.br/api/auth/v1", description="Auth API base URL"
-    )
+    integration_core_api_url: str = Field("https://api.sosportal.com.br/api/core/v1", description="Core API base URL")
+    integration_auth_api_url: str = Field("https://api.sosportal.com.br/api/auth/v1", description="Auth API base URL")
 
 
 @lru_cache
 def get_integration_settings() -> IntegrationSettings:
     return IntegrationSettings()
+
+
+class PipelineSettings(BaseSettings):
+    """Configuration for the 3-job integration pipeline (fetch → enrich → push)."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Job intervals (seconds) — how often each job polls for work
+    pipeline_fetch_interval_seconds: int = Field(3600, ge=60, description="Fetch job interval")
+    pipeline_enrich_interval_seconds: int = Field(3600, ge=60, description="Enrich job interval")
+    pipeline_push_interval_seconds: int = Field(3600, ge=60, description="Push job interval")
+
+    # Fetch job: date range
+    pipeline_fetch_days_ahead: int = Field(7, ge=1, le=30, description="Fetch d+1 to d+N")
+
+    # Enrich job: circuit breaker and batch size
+    pipeline_enrich_max_consecutive_failures: int = Field(5, ge=1, description="Circuit breaker threshold")
+    pipeline_enrich_batch_size: int = Field(50, ge=1, le=500, description="Max appointments per enrich cycle")
+
+    # Push job: batch size
+    pipeline_push_batch_size: int = Field(50, ge=1, le=500, description="Max appointments per push cycle")
+
+    # Slack notifications
+    slack_webhook_url: str = Field("", description="Slack incoming webhook URL for alerts")
+
+    # Pipeline enabled flags (graceful disable without restart)
+    pipeline_fetch_enabled: bool = Field(True, description="Enable/disable fetch job")
+    pipeline_enrich_enabled: bool = Field(True, description="Enable/disable enrich job")
+    pipeline_push_enabled: bool = Field(True, description="Enable/disable push job")
+
+    # Integration target system
+    pipeline_system_code: str = Field("SAUDE_AM_DIGITAL", description="Integration system code")
+
+
+@lru_cache
+def get_pipeline_settings() -> PipelineSettings:
+    return PipelineSettings()
