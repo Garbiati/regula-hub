@@ -31,6 +31,8 @@ export interface IntegrationAppointment {
 }
 
 export type AppointmentStatus =
+  | "awaiting_enrichment"
+  | "awaiting_integration"
   | "pending"
   | "patient_registered"
   | "integrated"
@@ -49,6 +51,8 @@ export interface AppointmentListResponse {
 }
 
 export interface AppointmentStatusCounts {
+  awaitingEnrichment: number;
+  awaitingIntegration: number;
   pending: number;
   integrated: number;
   skipped: number;
@@ -67,8 +71,11 @@ export interface AppointmentUpdateRequest {
   patientCns?: string;
   patientBirthDate?: string;
   patientPhone?: string;
+  patientMotherName?: string;
   doctorName?: string;
   doctorCpf?: string;
   departmentExecutor?: string;
   departmentExecutorCnes?: string;
+  confirmationKey?: string;
+  status?: "awaiting_enrichment" | "awaiting_integration";
 }

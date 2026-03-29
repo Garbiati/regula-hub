@@ -21,7 +21,10 @@ from regulahub.db.repositories.integration_execution import IntegrationExecution
 from regulahub.db.repositories.regulation_system import RegulationSystemRepository
 from regulahub.services.integration_worker_service import (
     cancel_execution,
+    get_enrich_consecutive_failures,
     get_execution_progress,
+    is_enrich_paused,
+    reset_enrich_circuit,
     trigger_execution,
 )
 
@@ -216,3 +219,25 @@ async def cancel_worker_execution(
     if not cancelled:
         raise HTTPException(status_code=404, detail="Execution not found or not running")
     return {"id": str(execution_id), "status": "cancelling"}
+
+
+# ── Pipeline management endpoints ─────────────────────────────────────────────
+
+
+@router.get("/pipeline/status")
+@limiter.limit("30/minute")
+async def get_pipeline_status(request: Request) -> dict:
+    """Get current pipeline status including circuit breaker state."""
+    return {
+        "enrich_circuit_paused": is_enrich_paused(),
+        "enrich_consecutive_failures": get_enrich_consecutive_failures(),
+    }
+
+
+@router.post("/pipeline/enrich/reset-circuit-breaker")
+@limiter.limit("5/minute")
+async def reset_enrich_circuit_breaker(request: Request) -> dict:
+    """Reset the enrichment circuit breaker after manual reCAPTCHA resolution."""
+    was_paused = is_enrich_paused()
+    reset_enrich_circuit()
+    return {"reset": True, "was_paused": was_paused}

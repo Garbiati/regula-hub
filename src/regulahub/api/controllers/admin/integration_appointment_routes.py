@@ -1,10 +1,14 @@
 """Admin routes for integration appointment management."""
 
+import csv
+import io
+import json
 import logging
 import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from regulahub.api.controllers.admin.integration_appointment_schemas import (
@@ -69,6 +73,62 @@ def _appointment_to_response(appointment) -> AppointmentResponse:  # noqa: ANN00
     )
 
 
+APPOINTMENT_EXPORT_COLUMNS: list[str] = [
+    "id",
+    "integration_system_id",
+    "execution_id",
+    "regulation_code",
+    "confirmation_key",
+    "external_id",
+    "patient_name",
+    "patient_cpf",
+    "patient_cns",
+    "patient_birth_date",
+    "patient_phone",
+    "patient_mother_name",
+    "appointment_date",
+    "appointment_time",
+    "procedure_name",
+    "department_executor",
+    "department_executor_cnes",
+    "department_solicitor",
+    "department_solicitor_cnes",
+    "doctor_name",
+    "doctor_cpf",
+    "status",
+    "error_message",
+    "error_category",
+    "integration_data",
+    "source_data",
+    "reference_date",
+    "created_at",
+    "updated_at",
+]
+
+
+def build_appointment_csv_bytes(appointments: list) -> bytes:  # noqa: ANN001
+    """Build CSV bytes from IntegrationAppointment model instances."""
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";", lineterminator="\r\n")
+
+    writer.writerow(APPOINTMENT_EXPORT_COLUMNS)
+
+    for appt in appointments:
+        row = []
+        for col in APPOINTMENT_EXPORT_COLUMNS:
+            value = getattr(appt, col)
+            if col == "appointment_time" and value is not None:
+                value = value.strftime("%H:%M")
+            elif col in ("integration_data", "source_data") and value is not None:
+                value = json.dumps(value, ensure_ascii=False, default=str)
+            elif value is None:
+                value = ""
+            row.append(value)
+        writer.writerow(row)
+
+    return output.getvalue().encode("utf-8")
+
+
 @router.get("/", response_model=AppointmentListResponse)
 @limiter.limit("30/minute")
 async def list_appointments(
@@ -117,6 +177,33 @@ async def get_appointment_counts(
         cancelled=counts.get("cancelled", 0),
         completed=counts.get("completed", 0),
         no_show=counts.get("no_show", 0),
+    )
+
+
+@router.get("/export/csv")
+@limiter.limit("3/minute")
+async def export_appointments_csv(
+    request: Request,
+    status: str | None = Query(None, description="Filter by appointment status"),
+    date_from: date | None = Query(None, description="Filter appointments from this date"),
+    date_to: date | None = Query(None, description="Filter appointments up to this date"),
+    db: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    """Export all matching appointments as CSV file download."""
+    repo = IntegrationAppointmentRepository(db)
+    appointments = await repo.list_all_filtered(
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    csv_bytes = build_appointment_csv_bytes(appointments)
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="integration_appointments_{timestamp}.csv"'},
     )
 
 
@@ -184,7 +271,7 @@ async def retry_appointment(
             f"Only appointments with error status can be retried.",
         )
 
-    appointment.status = "pending"
+    appointment.status = "awaiting_integration"
     appointment.error_message = None
     appointment.error_category = None
     appointment.updated_at = datetime.now(UTC)

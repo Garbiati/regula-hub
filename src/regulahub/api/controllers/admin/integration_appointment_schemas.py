@@ -3,7 +3,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ── Request schemas ──────────────────────────────────────────────────────
 
@@ -19,17 +19,32 @@ class AppointmentListRequest(BaseModel):
 
 
 class AppointmentUpdateRequest(BaseModel):
-    """Partial update for appointment data (only non-None fields are applied)."""
+    """Partial update for appointment data (only non-None fields are applied).
+
+    Operator can set status to 'awaiting_integration' after manually filling required fields.
+    """
 
     patient_name: str | None = None
     patient_cpf: str | None = None
     patient_cns: str | None = None
     patient_birth_date: str | None = None
     patient_phone: str | None = None
+    patient_mother_name: str | None = None
     doctor_name: str | None = None
     doctor_cpf: str | None = None
     department_executor: str | None = None
     department_executor_cnes: str | None = None
+    confirmation_key: str | None = None
+    status: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_manual_status(cls, v: str | None) -> str | None:
+        if v is not None:
+            allowed = {"awaiting_enrichment", "awaiting_integration"}
+            if v not in allowed:
+                raise ValueError(f"Manual status can only be set to: {', '.join(sorted(allowed))}")
+        return v
 
 
 class DischargeWebhookRequest(BaseModel):
@@ -89,6 +104,8 @@ class AppointmentListResponse(BaseModel):
 class AppointmentStatusCounts(BaseModel):
     """Aggregated counts of appointments by status."""
 
+    awaiting_enrichment: int = 0
+    awaiting_integration: int = 0
     pending: int = 0
     integrated: int = 0
     skipped: int = 0

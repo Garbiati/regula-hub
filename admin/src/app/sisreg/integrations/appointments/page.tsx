@@ -14,6 +14,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
 
@@ -24,10 +25,13 @@ import {
   useAppointmentStatusCounts,
   useRetryAppointment,
   useCancelAppointment,
+  useExportIntegrationAppointmentsCsv,
 } from "@/hooks/use-integration-appointments";
 import type { IntegrationAppointment, AppointmentStatus } from "@/types/integration-appointment";
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode; color: string; bg: string; label: string }> = {
+  awaiting_enrichment: { icon: <Clock className="w-3.5 h-3.5" />, color: "text-cyan-400", bg: "bg-cyan-500/10", label: "Aguardando dados" },
+  awaiting_integration: { icon: <Clock className="w-3.5 h-3.5" />, color: "text-indigo-400", bg: "bg-indigo-500/10", label: "Pronto p/ integrar" },
   pending: { icon: <Clock className="w-3.5 h-3.5" />, color: "text-gray-400", bg: "bg-gray-500/10", label: "Pendente" },
   integrated: { icon: <CheckCircle2 className="w-3.5 h-3.5" />, color: "text-emerald-400", bg: "bg-emerald-500/10", label: "Integrado" },
   skipped: { icon: <SkipForward className="w-3.5 h-3.5" />, color: "text-blue-400", bg: "bg-blue-500/10", label: "Já existia" },
@@ -123,6 +127,7 @@ export default function IntegrationAppointmentsPage() {
   const { data: counts } = useAppointmentStatusCounts();
   const retryMutation = useRetryAppointment();
   const cancelMutation = useCancelAppointment();
+  const exportCsv = useExportIntegrationAppointmentsCsv();
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -141,7 +146,9 @@ export default function IntegrationAppointmentsPage() {
         <div className="animate-fadeInUp-2">
           <Card className="glass-specular">
             <CardContent className="py-3">
-              <div className="grid grid-cols-5 sm:grid-cols-10 divide-x divide-[var(--glass-border)]">
+              <div className="grid grid-cols-6 sm:grid-cols-12 divide-x divide-[var(--glass-border)]">
+                <CountCard label="Aguard. Dados" count={counts.awaitingEnrichment ?? 0} color="text-cyan-400" />
+                <CountCard label="Pronto Integr." count={counts.awaitingIntegration ?? 0} color="text-indigo-400" />
                 <CountCard label={t("appointments.status_integrated")} count={counts.integrated} color="text-emerald-400" />
                 <CountCard label={t("appointments.status_skipped")} count={counts.skipped} color="text-blue-400" />
                 <CountCard label={t("appointments.status_pending")} count={counts.pending} color="text-gray-400" />
@@ -164,12 +171,27 @@ export default function IntegrationAppointmentsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>{t("appointments.list_title")} {total > 0 && `(${total})`}</CardTitle>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => exportCsv.mutate({ status: statusFilter || undefined })}
+                  disabled={exportCsv.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-surface)] px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors disabled:opacity-50"
+                >
+                  {exportCsv.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  {t("appointments.btn_export_csv")}
+                </button>
               <select
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
                 className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-surface)] px-3 py-1.5 text-xs text-[var(--text-primary)]"
               >
                 <option value="">{t("appointments.filter_all")}</option>
+                <option value="awaiting_enrichment">Aguardando Dados</option>
+                <option value="awaiting_integration">Pronto p/ Integrar</option>
                 <option value="integrated">{t("appointments.status_integrated")}</option>
                 <option value="skipped">{t("appointments.status_skipped")}</option>
                 <option value="pending">{t("appointments.status_pending")}</option>
@@ -180,6 +202,7 @@ export default function IntegrationAppointmentsPage() {
                 <option value="cancelled">{t("appointments.status_cancelled")}</option>
                 <option value="completed">{t("appointments.status_completed")}</option>
               </select>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
