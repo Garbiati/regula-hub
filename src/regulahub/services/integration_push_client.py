@@ -137,7 +137,7 @@ class IntegrationPushClient:
             "gender": "unknown",  # TODO: refactor — hardcoded for Saude AM Digital
             "cpf": data.get("cpf", ""),
             "cns": data.get("cns", ""),
-            "phone": data.get("phone", "00000000000"),
+            "phone": data.get("phone", ""),
             "email": None,
             "group_id": group_id,  # TODO: refactor — Saude AM Digital specific
         }

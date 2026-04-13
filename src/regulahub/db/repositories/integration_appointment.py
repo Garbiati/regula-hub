@@ -166,7 +166,7 @@ class IntegrationAppointmentRepository:
         if not items:
             return 0
 
-        terminal_statuses = {"completed", "no_show", "cancelled"}
+        terminal_statuses = {"completed", "no_show", "cancelled", "expired"}
         count = 0
 
         for item_data in items:

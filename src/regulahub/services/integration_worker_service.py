@@ -28,6 +28,21 @@ SISREG_BASE_URL = "https://sisregiii.saude.gov.br"
 TELECONSULTA_FILTER = "TELECONSULTA"
 
 
+def _is_valid_brazilian_phone(digits: str) -> bool:
+    """Validate Brazilian phone: 10-11 digits, valid DDD, not all same digit."""
+    if len(digits) not in (10, 11):
+        return False
+    if len(set(digits)) == 1:
+        return False
+    ddd = int(digits[:2])
+    if ddd < 11 or ddd > 99:
+        return False
+    number_part = digits[2:]
+    if len(number_part) == 9 and number_part[0] != "9":
+        return False
+    return not (len(number_part) == 8 and number_part[0] not in "2345")
+
+
 @dataclasses.dataclass
 class ExecutionProgress:
     """In-memory execution progress for real-time polling."""
@@ -91,10 +106,11 @@ class EnrichedAppointment:
 
 @dataclasses.dataclass
 class EnrichmentResult:
-    """Result of the enrichment pipeline — enriched appointments + failures."""
+    """Result of the enrichment pipeline — enriched appointments + failures + pending review."""
 
     enriched: list[dict]
     failed: list[dict]
+    needs_review: list[dict] = dataclasses.field(default_factory=list)
 
 
 def _build_failed_appointment_dict(
@@ -482,13 +498,12 @@ async def _enrich_appointments(
         raw_birth = cadsus.get("birth_date", "") or row.dt_nascimento or ""
         birth_date = raw_birth.replace(".", "/").strip() if raw_birth else ""
 
-        # Phone: prefer CADSUS, fallback to CSV, default to 00000000000
-        # Clean to digits only, validate 10-15 digits, else fallback
+        # Phone: prefer CADSUS, fallback to CSV, validate semantically
         import re as _re
 
         raw_phone = cadsus.get("phone", "") or row.telefone or ""
         phone_digits = _re.sub(r"\D", "", raw_phone)
-        phone = phone_digits if 10 <= len(phone_digits) <= 15 else "00000000000"
+        phone = phone_digits if _is_valid_brazilian_phone(phone_digits) else ""
 
         # Preference of service
         preference = "ONLINE" if is_remote else "PRESENCIAL"
@@ -521,13 +536,28 @@ async def _enrich_appointments(
             }
         )
 
-    progress.total_enriched = len(enriched)
+    # Separate enriched into ready (valid phone) vs needs_review (missing phone)
+    ready_for_push = []
+    needs_review = []
+    for appt in enriched:
+        if not appt.get("patient_phone"):
+            needs_review.append(appt)
+        else:
+            ready_for_push.append(appt)
+
+    progress.total_enriched = len(ready_for_push)
+    if needs_review:
+        logger.warning(
+            "Worker enrichment: %d appointments pending review (missing phone)",
+            len(needs_review),
+        )
     logger.info(
-        "Worker enrichment complete: %d ready for push, %d failed (mapping/data errors)",
-        len(enriched),
+        "Worker enrichment complete: %d ready for push, %d pending review, %d failed",
+        len(ready_for_push),
+        len(needs_review),
         len(failed),
     )
-    return EnrichmentResult(enriched=enriched, failed=failed)
+    return EnrichmentResult(enriched=ready_for_push, failed=failed, needs_review=needs_review)
 
 
 async def _persist_appointments(
@@ -535,8 +565,11 @@ async def _persist_appointments(
     execution_id: uuid.UUID,
     system_id: uuid.UUID,
     reference_date: date,
+    status: str = "pending",
+    error_message: str | None = None,
+    error_category: str | None = None,
 ) -> None:
-    """Batch insert enriched appointments as 'pending' before push."""
+    """Batch insert appointments with given status before push."""
     from regulahub.db.engine import get_session_factory
     from regulahub.db.repositories.integration_appointment import IntegrationAppointmentRepository
 
@@ -584,7 +617,9 @@ async def _persist_appointments(
                     "department_solicitor": appt.get("department_solicitor", ""),
                     "department_solicitor_cnes": appt.get("department_solicitor_cnes", ""),
                     "doctor_name": appt.get("doctor_name", ""),
-                    "status": "pending",
+                    "status": status,
+                    "error_message": error_message or "",
+                    "error_category": error_category or "",
                     "integration_data": {
                         "group_id": appt.get("group_id", ""),
                         "work_scale_name": appt.get("work_scale_name", ""),
@@ -604,7 +639,7 @@ async def _persist_appointments(
         if items:
             await repo.bulk_upsert(items)
             await db_session.commit()
-            logger.info("Persisted %d appointments as pending", len(items))
+            logger.info("Persisted %d appointments as '%s'", len(items), status)
 
 
 async def _persist_failed_appointments(
@@ -852,6 +887,29 @@ async def execute_integration(
         # ── Step 2.5: Persist appointments as 'pending' before push ──
         if enriched and system_id:
             await _persist_appointments(enriched, execution_id, system_id, date_from)
+
+        # ── Step 2.5b: Persist appointments needing review (missing required fields) ──
+        if enrich_result.needs_review and system_id:
+            await _persist_appointments(
+                enrich_result.needs_review,
+                execution_id,
+                system_id,
+                date_from,
+                status="pending_review",
+                error_message="Telefone do paciente ausente ou invalido (CADSUS/CSV)",
+                error_category="missing_phone",
+            )
+            from regulahub.services.slack_notifier import send_slack_alert
+
+            names = [a.get("patient_first_name", "?") for a in enrich_result.needs_review[:10]]
+            await send_slack_alert(
+                f"Agendamentos pendentes de revisao: {len(enrich_result.needs_review)} sem telefone valido",
+                context={
+                    "Motivo": "Telefone nao encontrado no CADSUS nem no CSV do SISReg",
+                    "Pacientes": ", ".join(names) + ("..." if len(enrich_result.needs_review) > 10 else ""),
+                    "Acao": "Verificar dados no CADSUS ou corrigir manualmente",
+                },
+            )
 
         # ── Step 2.6: Persist failed appointments (mapping/data errors) for operator visibility ──
         if enrich_result.failed and system_id:
@@ -1431,7 +1489,7 @@ def _build_push_payload_from_record(appt: object) -> dict | None:
         "patient_last_name": last_name,
         "patient_birth_date": appt.patient_birth_date or "",
         "patient_mother_name": appt.patient_mother_name or "",
-        "patient_phone": appt.patient_phone or "00000000000",
+        "patient_phone": appt.patient_phone or "",
         "doctor_name": appt.doctor_name or "",
         "group_id": group_id,
         "work_scale_name": int_data.get("work_scale_name", ""),
@@ -1442,11 +1500,41 @@ def _build_push_payload_from_record(appt: object) -> dict | None:
     }
 
 
+async def expire_pending_reviews() -> int:
+    """Transition pending_review appointments past their date to expired. Returns count."""
+    from regulahub.db.engine import get_session_factory
+    from regulahub.db.repositories.integration_appointment import IntegrationAppointmentRepository
+
+    session_factory = get_session_factory()
+    async with session_factory() as db_session:
+        repo = IntegrationAppointmentRepository(db_session)
+        pending = await repo.list_by_status("pending_review", limit=500)
+        today = date.today()
+        expired_count = 0
+        for appt in pending:
+            if appt.appointment_date and appt.appointment_date < today:
+                await repo.update_status(
+                    appt.id,
+                    status="expired",
+                    error_message="Agendamento expirado: campo obrigatorio nao resolvido antes da data",
+                    error_category="expired_review",
+                )
+                expired_count += 1
+        if expired_count:
+            await db_session.commit()
+            logger.info("Expired %d pending_review appointments past their date", expired_count)
+    return expired_count
+
+
 async def job_push_integration() -> None:
     """Job 3: Push enriched appointments to integration system.
 
     Queries 'awaiting_integration' (and legacy 'pending') records, pushes via IntegrationPushClient.
+    Expires pending_review appointments past their date before processing.
     """
+    # Expire stale pending_review records before pushing
+    await expire_pending_reviews()
+
     from regulahub.config import get_integration_settings, get_pipeline_settings
     from regulahub.db.engine import get_session_factory
     from regulahub.db.repositories.integration_appointment import IntegrationAppointmentRepository
